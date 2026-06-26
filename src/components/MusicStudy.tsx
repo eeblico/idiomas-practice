@@ -304,6 +304,7 @@ export const MusicStudy: React.FC = () => {
   const [orderedWords, setOrderedWords] = useState<ScrambledWord[]>([]);
   const [reorderSubmitted, setReorderSubmitted] = useState(false);
   const [reorderCorrect, setReorderCorrect] = useState<boolean | null>(null);
+  const [showScrambleTranslation, setShowScrambleTranslation] = useState(false);
 
   // Refs for Autoplay Shadowing
   const playbackSpeedRef = useRef(playbackSpeed);
@@ -809,6 +810,7 @@ export const MusicStudy: React.FC = () => {
     setReorderSubmitted(false);
     setReorderCorrect(null);
     setOrderedWords([]);
+    setShowScrambleTranslation(false);
 
     const targetLine = lines[actualIdx].text;
     const rawWords = targetLine.split(/\s+/);
@@ -821,6 +823,9 @@ export const MusicStudy: React.FC = () => {
 
     const scrambled = [...wordsWithIds].sort(() => 0.5 - Math.random());
     setScrambledWords(scrambled);
+
+    // Speak the line automatically to guide the user's listening practice
+    speakLine(targetLine, song.language_id || targetLanguage);
   };
 
   const handleMoveToOrderedWord = (word: ScrambledWord) => {
@@ -1707,31 +1712,111 @@ export const MusicStudy: React.FC = () => {
                 {studyTab === 'reorder' && cleanSongLines.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     
-                    {/* Line selector dropdown */}
+                    {/* Line selector dropdown (Shows generic phrase numbering to avoid leaking target text) */}
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Escolha a Frase:</span>
                       <select 
                         className="input-text"
-                        style={{ padding: '6px 12px', fontSize: '0.8rem', maxWidth: '280px' }}
+                        style={{ padding: '6px 12px', fontSize: '0.8rem', maxWidth: '160px' }}
                         value={selectedScrambleLineIdx}
                         onChange={(e) => initScrambleGame(activeSong!, parseInt(e.target.value))}
                       >
                         {cleanSongLines.map((line, idx) => (
                           <option key={idx} value={idx}>
-                            Frase #{idx + 1}: {line.translation ? (line.translation.length > 35 ? line.translation.substring(0, 35) + '...' : line.translation) : `Frase ${idx + 1}`}
+                            Frase #{idx + 1}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Target translation prompt (Hiding English answer and guiding the user) */}
-                    <div className="glass-card" style={{ padding: '14px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent)', display: 'block', marginBottom: '6px', letterSpacing: '0.05em' }}>
-                        Tradução (Monte a frase correspondente em inglês)
-                      </span>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                        {cleanSongLines[selectedScrambleLineIdx]?.translation || `Frase ${selectedScrambleLineIdx + 1}`}
-                      </span>
+                    {/* Listening Practice Audio Panel */}
+                    <div className="glass-card" style={{ 
+                      padding: '16px 20px', 
+                      borderRadius: 'var(--radius-lg)', 
+                      border: '1px solid var(--border)', 
+                      background: 'rgba(255,255,255,0.02)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '16px'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent)', letterSpacing: '0.05em' }}>
+                          Treino de Audição (Listening)
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          Ouça o áudio da frase e organize as palavras com base no som!
+                        </span>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cleanLines = activeSong?.lyrics.split('\n').map(l => l.trim()).filter(l => l !== '') || [];
+                          const targetLine = cleanLines[selectedScrambleLineIdx];
+                          if (targetLine) {
+                            speakLine(targetLine, activeSong?.language_id || targetLanguage);
+                          }
+                        }}
+                        className="btn btn-primary"
+                        style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0,
+                          flexShrink: 0
+                        }}
+                        title="Ouvir Frase"
+                      >
+                        <Play size={20} style={{ marginLeft: '3px' }} />
+                      </button>
+                    </div>
+
+                    {/* Collapsible Translation section for optional confirmation */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowScrambleTranslation(prev => !prev)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          alignSelf: 'flex-start',
+                          padding: '4px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {showScrambleTranslation ? (
+                          <>
+                            <EyeOff size={14} /> Ocultar Tradução
+                          </>
+                        ) : (
+                          <>
+                            <Eye size={14} /> Mostrar Tradução (Dica)
+                          </>
+                        )}
+                      </button>
+
+                      {showScrambleTranslation && (
+                        <div className="glass-card fade-in" style={{ padding: '14px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent)', display: 'block', marginBottom: '4px', letterSpacing: '0.05em' }}>
+                            Tradução da Frase
+                          </span>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                            {cleanSongLines[selectedScrambleLineIdx]?.translation || `Frase ${selectedScrambleLineIdx + 1}`}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Word Board layout */}
