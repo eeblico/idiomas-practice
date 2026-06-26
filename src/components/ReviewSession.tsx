@@ -1,0 +1,965 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useApp, Phrase } from '../context/AppContext';
+import { supabase } from '../services/supabase';
+import { 
+  Volume2, Star, ArrowLeft, RefreshCw, CheckCircle, 
+  Clock, BookOpen, Sparkles, Sliders, Settings, AlertCircle, Plus, Edit2,
+  Languages
+} from 'lucide-react';
+
+const FIBONACCI_SEQUENCE = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377];
+
+const getLanguageName = (langId: string): string => {
+  const map: Record<string, string> = {
+    en: 'Inglês',
+    es: 'Espanhol',
+    fr: 'Francês',
+    it: 'Italiano',
+    de: 'Alemão',
+    zh: 'Mandarim',
+    ru: 'Russo'
+  };
+  return map[langId] || langId;
+};
+
+const formatInterval = (days: number): string => {
+  if (days === 1) return '1 dia';
+  return `${days} dias`;
+};
+
+export const ReviewSession: React.FC = () => {
+  const {
+    phrases,
+    favorites,
+    toggleFavorite,
+    submitPracticeResult,
+    markPhraseAsSeen,
+    setActiveTab,
+    reviewAlgorithm,
+    setReviewAlgorithm,
+    reviewItems,
+    user,
+    categories,
+    updatePhrase,
+    targetLanguage
+  } = useApp();
+
+  // Navigation states
+  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionType, setSessionType] = useState<'due' | 'new' | 'all'>('due');
+
+  // Custom session config states
+  const [reviewCategoryFilter, setReviewCategoryFilter] = useState<string>('all');
+  const [newCardsLimit, setNewCardsLimit] = useState<number>(10);
+
+  // Card edit form states
+  const [isEditingCard, setIsEditingCard] = useState(false);
+  const [editCardText, setEditCardText] = useState('');
+  const [editCardTranslation, setEditCardTranslation] = useState('');
+  const [editCardExplanation, setEditCardExplanation] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  
+  // Session queue states
+  const [sessionQueue, setSessionQueue] = useState<Phrase[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [lapsedPhrasesSet, setLapsedPhrasesSet] = useState<Set<string>>(new Set());
+  const [sessionFeedback, setSessionFeedback] = useState<string | null>(null);
+  
+  // Stats inside current session
+  const [cardsReviewedCount, setCardsReviewedCount] = useState(0);
+  const [initialQueueLength, setInitialQueueLength] = useState(0);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const nowTime = useMemo(() => new Date().getTime(), [sessionActive]);
+
+  const filteredPhrasesForReview = useMemo(() => {
+    if (reviewCategoryFilter === 'all') return phrases;
+    return phrases.filter(p => p.category_id === reviewCategoryFilter);
+  }, [phrases, reviewCategoryFilter]);
+
+  // --- Dashboard Statistics Calculations ---
+  const stats = useMemo(() => {
+    // 1. Due Phrases (Pendente)
+    const due = filteredPhrasesForReview.filter(p => {
+      const item = reviewItems[p.id];
+      return item && new Date(item.next_review_date).getTime() <= nowTime;
+    });
+
+    // 2. New Phrases (Novos)
+    const newCards = filteredPhrasesForReview.filter(p => !reviewItems[p.id]);
+
+    // 3. Learned/In-review Phrases (Em Aprendizado)
+    const learned = filteredPhrasesForReview.filter(p => {
+      const item = reviewItems[p.id];
+      return item && new Date(item.next_review_date).getTime() > nowTime;
+    });
+
+    return {
+      dueCount: due.length,
+      newCount: newCards.length,
+      learnedCount: learned.length,
+      duePhrases: due,
+      newPhrases: newCards
+    };
+  }, [filteredPhrasesForReview, reviewItems, nowTime]);
+
+  // Audio Playback Helpers
+  const getAudioUrl = (phrase: Phrase): string | null => {
+    if (!phrase.audio_url) return null;
+    if (phrase.audio_url.startsWith('http')) return phrase.audio_url;
+    
+    const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
+    return data.publicUrl;
+  };
+
+  const playPhraseAudio = (phrase: Phrase) => {
+    if (isPlaying) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setIsPlaying(false);
+    }
+
+    const url = getAudioUrl(phrase);
+    if (url) {
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      
+      // Preserve pitch when speed is changed
+      if ('preservesPitch' in audio) {
+        audio.preservesPitch = true;
+      } else if ('webkitPreservesPitch' in audio) {
+        (audio as any).webkitPreservesPitch = true;
+      } else if ('mozPreservesPitch' in audio) {
+        (audio as any).mozPreservesPitch = true;
+      }
+      
+      const speed = phrase.speed || 1.0;
+      audio.defaultPlaybackRate = speed;
+      audio.playbackRate = speed;
+      
+      audio.onplay = () => {
+        setIsPlaying(true);
+        audio.playbackRate = speed;
+      };
+      audio.oncanplay = () => {
+        audio.playbackRate = speed;
+      };
+      audio.onended = () => setIsPlaying(false);
+      audio.onerror = () => {
+        setIsPlaying(false);
+        speakFallback(phrase.text, phrase.language_id);
+      };
+      
+      audio.play().then(() => {
+        audio.playbackRate = speed;
+      }).catch(() => {
+        setIsPlaying(false);
+        speakFallback(phrase.text, phrase.language_id);
+      });
+    } else {
+      speakFallback(phrase.text, phrase.language_id);
+    }
+  };
+
+  const speakFallback = (text: string, langCode: string) => {
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      activeUtteranceRef.current = utterance; // Keep alive!
+      
+      const langMapping: Record<string, string> = {
+        en: 'en-US',
+        es: 'es-ES',
+        fr: 'fr-FR',
+        it: 'it-IT',
+        de: 'de-DE',
+        zh: 'zh-CN',
+        ru: 'ru-RU'
+      };
+      utterance.lang = langMapping[langCode] || langCode;
+      utterance.rate = currentPhrase?.speed || 1.0;
+      
+      utterance.onstart = () => setIsPlaying(true);
+      utterance.onend = () => {
+        setIsPlaying(false);
+        activeUtteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+        activeUtteranceRef.current = null;
+      };
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn(e);
+      activeUtteranceRef.current = null;
+    }
+  };
+
+  // Trigger audio on card render
+  const currentPhrase = sessionQueue[currentIndex];
+  useEffect(() => {
+    if (currentPhrase && sessionActive && !completed && !isEditingCard) {
+      // Delay slightly for smooth transition
+      const timer = setTimeout(() => {
+        playPhraseAudio(currentPhrase);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [currentPhrase?.id, sessionActive, completed, isEditingCard]);
+
+  // Start Session Actions
+  const handleStartSession = (type: 'due' | 'new' | 'all') => {
+    let list: Phrase[] = [];
+    setSessionType(type);
+
+    if (type === 'due') {
+      list = [...stats.duePhrases];
+    } else if (type === 'new') {
+      // Pick up to customized limit new cards to study and introduce them
+      list = stats.newPhrases.slice(0, newCardsLimit);
+    } else {
+      // Review everything that has been seen/introduced in the filtered set
+      list = filteredPhrasesForReview.filter(p => reviewItems[p.id]);
+    }
+
+    if (list.length === 0) return;
+
+    // Shuffle queue
+    const shuffled = list.sort(() => 0.5 - Math.random());
+    setSessionQueue(shuffled);
+    setInitialQueueLength(shuffled.length);
+    setCurrentIndex(0);
+    setRevealed(false);
+    setCompleted(false);
+    setSessionActive(true);
+    setLapsedPhrasesSet(new Set());
+    setCardsReviewedCount(0);
+  };
+
+  const handleReveal = () => {
+    setRevealed(true);
+  };
+
+  const handleStartEditCard = (phrase: Phrase) => {
+    setEditCardText(phrase.text);
+    setEditCardTranslation(phrase.translation);
+    setEditCardExplanation(phrase.explanation || '');
+    setIsEditingCard(true);
+  };
+
+  const handleSaveCardEdit = () => {
+    if (!currentPhrase) return;
+    if (!editCardText.trim() || !editCardTranslation.trim()) {
+      alert('Texto original e tradução são obrigatórios.');
+      return;
+    }
+
+    const cleanOriginal = currentPhrase.text.trim().replace(/\s+/g, ' ');
+    const cleanEdited = editCardText.trim().replace(/\s+/g, ' ');
+    const textChanged = cleanOriginal !== cleanEdited;
+
+    updatePhrase(currentPhrase.id, {
+      text: editCardText.trim(),
+      translation: editCardTranslation.trim(),
+      explanation: editCardExplanation.trim(),
+      ...(textChanged ? { audio_url: null } : {})
+    });
+
+    setSessionQueue(prev => prev.map(item => {
+      if (item.id === currentPhrase.id) {
+        return {
+          ...item,
+          text: editCardText.trim(),
+          translation: editCardTranslation.trim(),
+          explanation: editCardExplanation.trim(),
+          ...(textChanged ? { audio_url: null } : {})
+        };
+      }
+      return item;
+    }));
+
+    setIsEditingCard(false);
+  };
+
+  const handleAutoTranslateText = async (text: string, callback: (val: string) => void) => {
+    if (!text.trim()) {
+      alert("Escreva alguma sentença no texto original antes de traduzir.");
+      return;
+    }
+    setIsTranslating(true);
+    try {
+      const sourceLang = targetLanguage || 'en';
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|pt`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data?.responseData?.translatedText) {
+        callback(data.responseData.translatedText);
+      } else {
+        alert("Não foi possível obter uma sugestão de tradução automática.");
+      }
+    } catch (error) {
+      console.error("Auto translation failed:", error);
+      alert("Erro ao conectar com o serviço de tradução.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Pre-calculate next interval previews
+  const getNextIntervalDays = (phraseId: string, rating: 'easy' | 'medium' | 'hard'): number => {
+    const item = reviewItems[phraseId];
+    if (reviewAlgorithm === 'fibonacci') {
+      const stage = item ? item.repetitions : 0;
+      let nextStage = stage;
+      if (rating === 'easy') {
+        nextStage = Math.min(FIBONACCI_SEQUENCE.length - 1, stage + 2);
+      } else if (rating === 'medium') {
+        nextStage = Math.min(FIBONACCI_SEQUENCE.length - 1, stage + 1);
+      } else {
+        nextStage = Math.max(0, stage - 2);
+      }
+      return FIBONACCI_SEQUENCE[nextStage];
+    } else {
+      // SM-2 Spaced Repetition calculation
+      const reps = item ? item.repetitions : 0;
+      const interval = item ? item.interval_days : 0;
+      const ef = item ? parseFloat(item.ease_factor) : 2.5;
+
+      if (rating === 'hard') return 1;
+
+      let nextInterval = interval;
+      let nextReps = reps;
+
+      if (nextReps === 0) {
+        nextInterval = 1;
+      } else if (nextReps === 1) {
+        nextInterval = 6;
+      } else {
+        // q values: easy = 5, medium = 3
+        const q = rating === 'easy' ? 5 : 3;
+        const nextEf = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+        nextInterval = Math.round(interval * Math.max(1.3, nextEf));
+      }
+      return nextInterval;
+    }
+  };
+
+  // Submit response & handle queue progression
+  const handleRateDifficulty = async (rating: 'easy' | 'medium' | 'hard') => {
+    if (!currentPhrase) return;
+
+    // Determine if this card was already failed in the current session
+    const isLapsed = lapsedPhrasesSet.has(currentPhrase.id);
+
+    // 1. Submit card review only if it wasn't already failed in this session
+    // (This prevents overwriting the initial 'hard' state penalty and scheduling it for tomorrow)
+    if (!isLapsed) {
+      await submitPracticeResult(currentPhrase.id, rating);
+    }
+
+    // Increment reviewed count
+    setCardsReviewedCount(prev => prev + 1);
+
+    if (rating === 'hard') {
+      // Re-queue card at the end of the current session list so they practice it again (forcing active recall)
+      setLapsedPhrasesSet(prev => {
+        const next = new Set(prev);
+        next.add(currentPhrase.id);
+        return next;
+      });
+
+      setSessionQueue(prev => {
+        const next = [...prev];
+        next.push(currentPhrase); // Append copy to end of queue
+        return next;
+      });
+
+      setSessionFeedback('Frase recolocada no fim da fila para reforço.');
+      setTimeout(() => setSessionFeedback(null), 3000);
+
+      setRevealed(false);
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      // Correct (Medium / Easy)
+      if (currentIndex + 1 < sessionQueue.length) {
+        setRevealed(false);
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        setCompleted(true);
+      }
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    setSessionActive(false);
+    setCompleted(false);
+  };
+
+  const isFavorite = currentPhrase ? favorites.includes(currentPhrase.id) : false;
+
+  // --- Active Review Session View ---
+  if (sessionActive) {
+    if (completed || sessionQueue.length === 0) {
+      return (
+        <div className="fade-in" style={{ textAlign: 'center', padding: '40px 20px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+          <CheckCircle size={64} style={{ color: 'var(--success)', filter: 'drop-shadow(0 0 10px rgba(16, 185, 129, 0.25))' }} />
+          
+          <div>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Sessão Concluída! 🎉</h2>
+            <p style={{ color: 'var(--text-muted)', marginTop: '8px', fontSize: '0.9rem', maxWidth: '450px', lineHeight: 1.5 }}>
+              Excelente! Você praticou as frases selecionadas. As curvas de retenção de memória foram atualizadas com sucesso.
+            </p>
+          </div>
+
+          <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '16px 32px', width: '100%', maxWidth: '400px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent)' }}>{cardsReviewedCount}</div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cards Revisados</span>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>
+                {Math.max(0, initialQueueLength - lapsedPhrasesSet.size)}
+              </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sem Erros</span>
+            </div>
+          </div>
+
+          <button className="btn btn-primary" onClick={handleBackToDashboard} style={{ padding: '12px 28px', borderRadius: '30px' }}>
+            Voltar ao Painel de Revisão
+          </button>
+        </div>
+      );
+    }
+
+    const isLapsedCard = currentPhrase ? lapsedPhrasesSet.has(currentPhrase.id) : false;
+
+    return (
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        
+        {/* Session Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <button onClick={handleBackToDashboard} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <ArrowLeft size={18} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Parar Sessão</span>
+          </button>
+          
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Clock size={16} /> {sessionType === 'new' ? 'Estudo de Novos' : 'Revisão'} ({currentIndex + 1}/{sessionQueue.length})
+          </span>
+        </div>
+
+        {/* Practice card container */}
+        <div className="card-practice-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Progress bar */}
+          <div className="progress-dots" style={{ gap: '4px', height: '4px' }}>
+            {sessionQueue.map((_, idx) => (
+              <span
+                key={idx}
+                className={`progress-dot ${idx < currentIndex ? 'completed' : ''} ${idx === currentIndex ? 'active' : ''}`}
+                style={{ flex: 1, borderRadius: '2px', height: '100%' }}
+              />
+            ))}
+          </div>
+
+          {/* Toast feedback */}
+          {sessionFeedback && (
+            <div className="scale-in" style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 16px',
+              fontSize: '0.8rem',
+              color: '#fca5a5',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              justifyContent: 'center',
+              width: '100%'
+            }}>
+              <AlertCircle size={14} /> {sessionFeedback}
+            </div>
+          )}
+
+          {/* Flashcard */}
+          <div 
+            className={`flashcard ${!revealed ? 'unrevealed' : ''}`}
+            onClick={!revealed ? handleReveal : undefined}
+            style={{ position: 'relative', flex: 1, minHeight: '260px' }}
+          >
+            {/* Action Bar inside card */}
+            <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
+              {isLapsedCard && (
+                <span style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  color: '#ef4444',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  🔁 Fila de Reforço
+                </span>
+              )}
+              
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStartEditCard(currentPhrase);
+                }} 
+                className="btn-icon"
+                style={{ width: '36px', height: '36px' }}
+                title="Editar conteúdo da frase"
+              >
+                <Edit2 size={15} />
+              </button>
+
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(currentPhrase.id);
+                }} 
+                className={`btn-icon ${isFavorite ? 'active' : ''}`}
+                style={{ width: '36px', height: '36px' }}
+              >
+                <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+              </button>
+            </div>
+
+            {isEditingCard ? (
+              <div 
+                className="fade-in" 
+                onClick={(e) => e.stopPropagation()} 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '12px', 
+                  padding: '16px',
+                  textAlign: 'left',
+                  justifyContent: 'center'
+                }}
+              >
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent)', margin: 0 }}>
+                  ✏️ Ajustar Conteúdo do Card
+                </h4>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700 }}>Texto Original</label>
+                  <input 
+                    type="text" 
+                    className="input-text" 
+                    value={editCardText} 
+                    onChange={(e) => setEditCardText(e.target.value)} 
+                    style={{ width: '100%', fontSize: '0.82rem', padding: '6px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700 }}>Tradução</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input 
+                      type="text" 
+                      className="input-text" 
+                      value={editCardTranslation} 
+                      onChange={(e) => setEditCardTranslation(e.target.value)} 
+                      style={{ flex: 1, fontSize: '0.82rem', padding: '6px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAutoTranslateText(editCardText, setEditCardTranslation)}
+                      className="settings-btn"
+                      disabled={isTranslating}
+                      style={{
+                        padding: '6px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '32px',
+                      }}
+                      title="Sugerir tradução automática"
+                    >
+                      {isTranslating ? (
+                        <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid var(--text-secondary)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <Languages size={14} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700 }}>Explicação / Detalhes</label>
+                  <textarea 
+                    className="input-text" 
+                    value={editCardExplanation} 
+                    onChange={(e) => setEditCardExplanation(e.target.value)} 
+                    style={{ width: '100%', minHeight: '50px', fontSize: '0.78rem', padding: '6px', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setIsEditingCard(false)}
+                    style={{ flex: 1, padding: '6px', fontSize: '0.75rem' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={handleSaveCardEdit}
+                    style={{ flex: 1, padding: '6px', fontSize: '0.75rem', background: 'var(--accent)' }}
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            ) : revealed ? (
+              <div className="fade-in" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <div className="flashcard-target">
+                  <span style={{ fontSize: '1.8rem', fontWeight: 800 }}>{currentPhrase.text}</span>
+                  <div className="audio-waves-container" onClick={(e) => { e.stopPropagation(); playPhraseAudio(currentPhrase); }} style={{ cursor: 'pointer', marginTop: '12px' }}>
+                    <Volume2 size={22} style={{ color: isPlaying ? 'var(--accent)' : 'var(--text-secondary)' }} />
+                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                  </div>
+                </div>
+                
+                <div className="flashcard-translation" style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginTop: '16px' }}>
+                  {currentPhrase.translation}
+                </div>
+
+                {currentPhrase.explanation && (
+                  <div className="flashcard-explanation" style={{ marginTop: '20px', maxWidth: '550px' }}>
+                    {currentPhrase.explanation}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '20px' }}>
+                <div className="flashcard-translation" style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', padding: '0 20px' }}>
+                  {currentPhrase.translation}
+                </div>
+                
+                <div className="reveal-overlay">
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', animation: 'float 2s ease-in-out infinite' }}>
+                    <Volume2 size={24} />
+                  </div>
+                  <span className="reveal-text">Relembre em {getLanguageName(currentPhrase.language_id)}</span>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Toque para revelar a resposta</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Row */}
+          {!revealed ? (
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => playPhraseAudio(currentPhrase)} 
+                className="btn btn-secondary"
+                style={{ flex: 1, height: '48px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                <Volume2 size={16} /> Ouvir Frase
+              </button>
+              <button 
+                onClick={handleReveal} 
+                className="btn btn-primary"
+                style={{ flex: 2, height: '48px', borderRadius: 'var(--radius-md)' }}
+              >
+                Revelar Resposta
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: 600 }}>
+                Qual o nível de dificuldade dessa frase para você?
+              </div>
+              
+              <div className="rating-buttons-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <button className="rating-btn rating-btn-hard" onClick={() => handleRateDifficulty('hard')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800 }}>Difícil</span>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
+                    {reviewAlgorithm === 'fibonacci' ? 'Rever hoje' : `Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'hard'))}`}
+                  </span>
+                </button>
+                
+                <button className="rating-btn rating-btn-medium" onClick={() => handleRateDifficulty('medium')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800 }}>Médio</span>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
+                    {`Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'medium'))}`}
+                  </span>
+                </button>
+                
+                <button className="rating-btn rating-btn-easy" onClick={() => handleRateDifficulty('easy')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800 }}>Fácil</span>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
+                    {`Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'easy'))}`}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    );
+  }
+
+  // --- Dashboard Main Panel View ---
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* Dashboard Title Header */}
+      <div>
+        <h2 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Revisão Espaçada ⌛</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+          Otimize sua retenção de vocabulário e evite o esquecimento com métodos comprovados.
+        </p>
+      </div>
+
+      {/* Spaced Repetition Stats Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
+        
+        {/* Due Cards Box */}
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid var(--accent)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Agendadas
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.dueCount}</div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases para revisar hoje</span>
+        </div>
+
+        {/* New Cards Box */}
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #3b82f6', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Novas
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.newCount}</div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases prontas para iniciar</span>
+        </div>
+
+        {/* Learned Cards Box */}
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid var(--success)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Em Aprendizado
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.learnedCount}</div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases na rotação de fixação</span>
+        </div>
+      </div>
+
+      {/* Algorithm Configurator Box */}
+      <div className="glass-card" style={{ padding: '20px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+              <Sliders size={18} />
+            </div>
+            <div>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>Algoritmo de Aprendizado</h4>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Escolha o método matemático de repetição</span>
+            </div>
+          </div>
+
+          {/* Toggle Switches */}
+          <div style={{ display: 'flex', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: '20px', border: '1px solid var(--border)' }}>
+            <button
+              onClick={() => setReviewAlgorithm('fibonacci')}
+              style={{
+                background: reviewAlgorithm === 'fibonacci' ? '#10b981' : 'none',
+                border: 'none',
+                color: reviewAlgorithm === 'fibonacci' ? 'white' : 'var(--text-secondary)',
+                borderRadius: '16px',
+                padding: '6px 14px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              Fibonacci Spacing
+            </button>
+            <button
+              onClick={() => setReviewAlgorithm('sm2')}
+              style={{
+                background: reviewAlgorithm === 'sm2' ? '#10b981' : 'none',
+                border: 'none',
+                color: reviewAlgorithm === 'sm2' ? 'white' : 'var(--text-secondary)',
+                borderRadius: '16px',
+                padding: '6px 14px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              SuperMemo SM2
+            </button>
+          </div>
+        </div>
+
+        {/* Algorithm detail paragraph */}
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0, paddingLeft: '46px' }}>
+          {reviewAlgorithm === 'fibonacci' ? (
+            <>
+              <strong>Repetição Baseada em Fibonacci:</strong> Utiliza intervalos de retenção associados à sequência de Fibonacci (1, 2, 3, 5, 8, 13 dias...). Em caso de erro, você retrocede apenas 2 níveis, reforçando a memória sem zerar o progresso conquistado. Recomendado para o aprendizado de idiomas com foco no longo prazo.
+            </>
+          ) : (
+            <>
+              <strong>Algoritmo Clássico SM2:</strong> Utiliza fatores de facilidade ajustáveis para calcular os próximos intervalos. Respostas corretas multiplicam o intervalo de acordo com o nível de facilidade anterior. Se você errar, o card é resetado e retorna ao início (1 dia). Clássico e estruturado.
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* Study Session Start Selection Card */}
+      <div className="glass-card" style={{ padding: '24px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(255, 255, 255, 0.01)' }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <BookOpen size={18} style={{ color: 'var(--accent)' }} /> Iniciar Sessão de Estudo
+        </h3>
+
+        {/* Customization filters for Review Sessions */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '4px' }}>
+          {/* Category Filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '180px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Filtrar por Ilha
+            </span>
+            <select
+              value={reviewCategoryFilter}
+              onChange={(e) => setReviewCategoryFilter(e.target.value)}
+              className="input-text"
+              style={{ width: '100%', padding: '8px 10px', fontSize: '0.82rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'white' }}
+            >
+              <option value="all">Todas as Ilhas</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* New Cards Limit */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '150px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Limite de Novos Cards
+            </span>
+            <select
+              value={newCardsLimit}
+              onChange={(e) => setNewCardsLimit(Number(e.target.value))}
+              className="input-text"
+              style={{ width: '100%', padding: '8px 10px', fontSize: '0.82rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'white' }}
+            >
+              {[5, 10, 15, 20, 25, 30, 40, 50].map(val => (
+                <option key={val} value={val}>{val} cards</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          
+          {/* Option A: Review Due */}
+          <div 
+            onClick={() => stats.dueCount > 0 && handleStartSession('due')}
+            className={`glass-card ${stats.dueCount > 0 ? 'hover-scale' : ''}`}
+            style={{ 
+              padding: '16px', 
+              cursor: stats.dueCount > 0 ? 'pointer' : 'not-allowed', 
+              opacity: stats.dueCount > 0 ? 1 : 0.4, 
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 800 }}>Revisar Agendados</h4>
+                <span className="badge badge-easy" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>{stats.dueCount} cards</span>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.35 }}>
+                Pratique os cards agendados para hoje. Foco no fortalecimento da sua curva de esquecimento ativa.
+              </p>
+            </div>
+            
+            <button 
+              disabled={stats.dueCount === 0} 
+              className="btn btn-primary" 
+              style={{ padding: '8px 12px', fontSize: '0.75rem', width: '100%', borderRadius: '20px' }}
+            >
+              Iniciar Revisões
+            </button>
+          </div>
+
+          {/* Option B: Study New */}
+          <div 
+            onClick={() => stats.newCount > 0 && handleStartSession('new')}
+            className={`glass-card ${stats.newCount > 0 ? 'hover-scale' : ''}`}
+            style={{ 
+              padding: '16px', 
+              cursor: stats.newCount > 0 ? 'pointer' : 'not-allowed', 
+              opacity: stats.newCount > 0 ? 1 : 0.4, 
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 800 }}>Estudar Novos</h4>
+                <span className="badge badge-easy" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{stats.newCount} disponíveis</span>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.35 }}>
+                Introduza novos termos e frases de suas ilhas na rotatividade de estudos espaçados (lote de 10 cards).
+              </p>
+            </div>
+            
+            <button 
+              disabled={stats.newCount === 0} 
+              className="btn btn-secondary" 
+              style={{ padding: '8px 12px', fontSize: '0.75rem', width: '100%', borderRadius: '20px', borderColor: 'rgba(59,130,246,0.3)', color: '#3b82f6' }}
+            >
+              Aprender Novos Cards
+            </button>
+          </div>
+
+        </div>
+
+        {/* Option C: Review All (Secondary Action) */}
+        {stats.learnedCount > 0 && (
+          <button 
+            onClick={() => handleStartSession('all')}
+            className="btn btn-secondary" 
+            style={{ padding: '10px', fontSize: '0.8rem', borderRadius: '30px', marginTop: '8px', border: '1px dashed var(--border)' }}
+          >
+            Revisar Todos os Cards Ativos ({stats.learnedCount} na rotação)
+          </button>
+        )}
+      </div>
+
+    </div>
+  );
+};

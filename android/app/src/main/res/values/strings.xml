@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HyperLingua Practice</string>
+    <string name="title_activity_main">HyperLingua Practice</string>
+    <string name="package_name">app.hyperlingua.practice</string>
+    <string name="custom_url_scheme">app.hyperlingua.practice</string>
+</resources>
