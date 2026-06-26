@@ -1718,10 +1718,20 @@ export const MusicStudy: React.FC = () => {
                       >
                         {cleanSongLines.map((line, idx) => (
                           <option key={idx} value={idx}>
-                            Frase #{idx + 1}: {line.lyric.substring(0, 30)}...
+                            Frase #{idx + 1}: {line.translation ? (line.translation.length > 35 ? line.translation.substring(0, 35) + '...' : line.translation) : `Frase ${idx + 1}`}
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Target translation prompt (Hiding English answer and guiding the user) */}
+                    <div className="glass-card" style={{ padding: '14px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--accent)', display: 'block', marginBottom: '6px', letterSpacing: '0.05em' }}>
+                        Tradução (Monte a frase correspondente em inglês)
+                      </span>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                        {cleanSongLines[selectedScrambleLineIdx]?.translation || `Frase ${selectedScrambleLineIdx + 1}`}
+                      </span>
                     </div>
 
                     {/* Word Board layout */}
