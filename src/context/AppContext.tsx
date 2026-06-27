@@ -30,6 +30,7 @@ export interface Phrase {
   voice_name: string;
   speed: number;
   order_index?: number;
+  tags?: string[];
 }
 
 export interface LocalReviewItem {
@@ -99,6 +100,11 @@ interface AppContextType {
   reorderPhrases: (categoryId: string, phraseId: string, newPositionOneIndexed: number) => void;
   phraseStars: Record<string, number>;
   updatePhraseStars: (phraseId: string, starCount: number) => Promise<void>;
+  archivedPhrases: string[];
+  suspendedPhrases: string[];
+  toggleArchivePhrase: (phraseId: string) => void;
+  toggleSuspendPhrase: (phraseId: string) => void;
+  updatePhraseTags: (phraseId: string, tags: string[]) => void;
   deletePhrase: (phraseId: string) => void;
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
@@ -984,6 +990,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await submitPracticeResult(phraseId, difficulty);
   };
 
+  const [archivedPhrases, setArchivedPhrases] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('hl_archived_phrases');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [suspendedPhrases, setSuspendedPhrases] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('hl_suspended_phrases');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleArchivePhrase = (phraseId: string) => {
+    setArchivedPhrases(prev => {
+      const next = prev.includes(phraseId) ? prev.filter(id => id !== phraseId) : [...prev, phraseId];
+      localStorage.setItem('hl_archived_phrases', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const toggleSuspendPhrase = (phraseId: string) => {
+    setSuspendedPhrases(prev => {
+      const next = prev.includes(phraseId) ? prev.filter(id => id !== phraseId) : [...prev, phraseId];
+      localStorage.setItem('hl_suspended_phrases', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updatePhraseTags = (phraseId: string, tags: string[]) => {
+    const nextOverrides = { 
+      ...phraseOverrides, 
+      [phraseId]: { ...phraseOverrides[phraseId], tags } 
+    };
+    setPhraseOverrides(nextOverrides);
+    localStorage.setItem('hl_phrase_overrides', JSON.stringify(nextOverrides));
+  };
+
   const [deletedPhraseIds, setDeletedPhraseIds] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('hl_deleted_phrases');
@@ -1137,6 +1186,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reorderPhrases,
         phraseStars,
         updatePhraseStars,
+        archivedPhrases,
+        suspendedPhrases,
+        toggleArchivePhrase,
+        toggleSuspendPhrase,
+        updatePhraseTags,
         deletePhrase,
         customCategories,
         addCustomCategory,
