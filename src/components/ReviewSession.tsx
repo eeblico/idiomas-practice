@@ -89,11 +89,13 @@ export const ReviewSession: React.FC = () => {
 
   // Configuration and Filters
   const [reviewCategoryFilter, setReviewCategoryFilter] = useState<string>('all');
-  const [newCardsLimit, setNewCardsLimit] = useState<number>(10);
+  const [sessionCardsLimit, setSessionCardsLimit] = useState<number>(10);
   const [starsFilter, setStarsFilter] = useState<string>('all');
   const [shuffleQueue, setShuffleQueue] = useState<boolean>(true);
   const [showAlgorithmHelp, setShowAlgorithmHelp] = useState<boolean>(false);
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false);
+  const [showTranslationByDefault, setShowTranslationByDefault] = useState<boolean>(false);
+  const [revealTranslationOnly, setRevealTranslationOnly] = useState<boolean>(false);
 
   // Library tab filter states
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -439,6 +441,7 @@ export const ReviewSession: React.FC = () => {
     cardStartTimeRef.current = Date.now();
     setSecondsElapsed(0);
     setRevealTranslationClue(false);
+    setRevealTranslationOnly(false);
 
     // Cloze Game Init
     const cloze = getClozeSentence(currentPhrase.text);
@@ -508,7 +511,7 @@ export const ReviewSession: React.FC = () => {
     if (type === 'due') {
       list = [...stats.duePhrases];
     } else if (type === 'new') {
-      list = stats.newPhrases.slice(0, newCardsLimit);
+      list = [...stats.newPhrases];
     } else if (type === 'starred') {
       list = [...stats.starredPhrases];
     } else {
@@ -520,7 +523,10 @@ export const ReviewSession: React.FC = () => {
 
     if (list.length === 0) return;
 
-    const finalQueue = shuffleQueue ? [...list].sort(() => 0.5 - Math.random()) : [...list];
+    // Apply general card session limit
+    const slicedList = list.slice(0, sessionCardsLimit);
+
+    const finalQueue = shuffleQueue ? [...slicedList].sort(() => 0.5 - Math.random()) : [...slicedList];
     setSessionQueue(finalQueue);
     setInitialQueueLength(finalQueue.length);
     setCurrentIndex(0);
@@ -967,15 +973,46 @@ export const ReviewSession: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="fade-in" style={{ textAlign: 'center', cursor: 'pointer' }} onClick={handleReveal}>
-                      <div style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '20px' }}>
-                        {currentPhrase.translation}
+                    <div className="fade-in" style={{ textAlign: 'center', cursor: 'pointer', width: '100%' }} onClick={handleReveal}>
+                      <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', marginBottom: '20px' }}>
+                        {currentPhrase.text}
                       </div>
+
+                      {/* Conditional translation display */}
+                      {(showTranslationByDefault || revealTranslationOnly) ? (
+                        <div className="fade-in" style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                          {currentPhrase.translation}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRevealTranslationOnly(true);
+                          }}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: '6px 14px',
+                            fontSize: '0.72rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            margin: '0 auto 24px',
+                            borderRadius: '20px',
+                            border: '1px solid var(--border)',
+                            background: 'var(--bg-tertiary)'
+                          }}
+                          title="Mostrar tradução para este card"
+                        >
+                          <Eye size={12} /> Mostrar Tradução
+                        </button>
+                      )}
+
                       <div className="reveal-overlay">
                         <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', margin: '0 auto 10px', animation: 'float 2s ease-in-out infinite' }}>
                           <Volume2 size={24} />
                         </div>
-                        <span className="reveal-text">Toque para revelar a frase em {getLanguageName(currentPhrase.language_id)}</span>
+                        <span className="reveal-text">Toque para revelar a tradução e classificar</span>
                       </div>
                     </div>
                   )
@@ -1635,16 +1672,16 @@ export const ReviewSession: React.FC = () => {
                       </select>
                     </div>
 
-                    {/* Limit new cards */}
+                    {/* Limit cards */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Novos por Sessão</span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Cards por Sessão</span>
                       <select
-                        value={newCardsLimit}
-                        onChange={(e) => setNewCardsLimit(Number(e.target.value))}
+                        value={sessionCardsLimit}
+                        onChange={(e) => setSessionCardsLimit(Number(e.target.value))}
                         className="input-text"
                         style={{ width: '100%', padding: '6px 8px', fontSize: '0.78rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px' }}
                       >
-                        {[5, 10, 15, 20, 30].map(val => (
+                        {[5, 10, 15, 20, 30, 40, 50, 80, 100].map(val => (
                           <option key={val} value={val}>{val} cards</option>
                         ))}
                       </select>
@@ -1678,6 +1715,20 @@ export const ReviewSession: React.FC = () => {
                       type="checkbox"
                       checked={shuffleQueue}
                       onChange={(e) => setShuffleQueue(e.target.checked)}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                  </div>
+
+                  {/* Translation visibility toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Eye size={14} style={{ color: 'var(--accent)' }} />
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Deixar tradução visível em todos por padrão</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={showTranslationByDefault}
+                      onChange={(e) => setShowTranslationByDefault(e.target.checked)}
                       style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                     />
                   </div>

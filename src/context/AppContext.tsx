@@ -1135,16 +1135,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return user ? dbProgress.reviewItems : guestProgress.reviewItems;
   }, [user, dbProgress.reviewItems, guestProgress.reviewItems]);
 
-  // Spaced Repetition Due Checks (filtered by active language)
+  // Spaced Repetition Due Checks (filtered by active language, excluding archived/suspended)
   const reviewsDueCount = useMemo(() => {
     const activeReviews = Object.values(reviewItems);
-    const nowTime = new Date().getTime();
     const activePhrasesSet = new Set(filteredPhrases.map(p => p.id));
     return activeReviews.filter(item => {
-      const nextDate = new Date(item.next_review_date).getTime();
-      return nextDate <= nowTime && activePhrasesSet.has(item.phrase_id);
+      return activePhrasesSet.has(item.phrase_id) && 
+             !archivedPhrases.includes(item.phrase_id) && 
+             !suspendedPhrases.includes(item.phrase_id);
     }).length;
-  }, [reviewItems, filteredPhrases]);
+  }, [reviewItems, filteredPhrases, archivedPhrases, suspendedPhrases]);
 
   return (
     <AppContext.Provider
