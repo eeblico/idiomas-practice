@@ -10,11 +10,21 @@ export const Dashboard: React.FC = () => {
     categories,
     phrases,
     setActiveIslandId,
-    setActiveTab
+    setActiveTab,
+    recentIslandIds
   } = useApp();
 
-  // Pick first 3 islands with phrases as "Recent Lessons" mocks
+  // Get recently studied/visited islands, falling back to first 3 if none
   const getRecentIslands = () => {
+    const recent = categories.filter(c => recentIslandIds.includes(c.id));
+    const sortedRecent = [...recent].sort((a, b) => {
+      return recentIslandIds.indexOf(a.id) - recentIslandIds.indexOf(b.id);
+    });
+
+    if (sortedRecent.length > 0) {
+      return sortedRecent.slice(0, 3);
+    }
+
     return categories
       .filter(c => phrases.some(p => p.category_id === c.id))
       .slice(0, 3);

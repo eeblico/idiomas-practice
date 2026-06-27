@@ -109,6 +109,7 @@ interface AppContextType {
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
   deleteCustomCategory: (categoryId: string) => Promise<void>;
+  recentIslandIds: string[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -190,6 +191,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music'>('dashboard');
   const [targetLanguage, setTargetLanguageState] = useState<string>('en');
   const [activeIslandId, setActiveIslandIdState] = useState<string | null>(null);
+  const [recentIslandIds, setRecentIslandIds] = useState<string[]>([]);
 
   const [reviewAlgorithm, setReviewAlgorithmState] = useState<'sm2' | 'fibonacci'>(() => {
     return (localStorage.getItem('hl_review_algorithm') as 'sm2' | 'fibonacci') || 'fibonacci';
@@ -259,6 +261,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveIslandIdState(id);
     if (id) {
       localStorage.setItem(LOCAL_ISLAND_KEY, id);
+      try {
+        const langKey = `hl_recent_islands_${targetLanguage}`;
+        const storedRecent = localStorage.getItem(langKey);
+        let list: string[] = storedRecent ? JSON.parse(storedRecent) : [];
+        list = [id, ...list.filter(x => x !== id)].slice(0, 6);
+        localStorage.setItem(langKey, JSON.stringify(list));
+        setRecentIslandIds(list);
+      } catch (e) {
+        console.error('Error updating recent islands:', e);
+      }
     } else {
       localStorage.removeItem(LOCAL_ISLAND_KEY);
     }
@@ -287,10 +299,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (storedCustomCats) {
         setCustomCategories(JSON.parse(storedCustomCats));
       }
+      
+      const activeLang = storedLang || 'en';
+      const langKey = `hl_recent_islands_${activeLang}`;
+      const storedRecent = localStorage.getItem(langKey);
+      if (storedRecent) {
+        setRecentIslandIds(JSON.parse(storedRecent));
+      }
     } catch (e) {
       console.error('Error loading guest progress / custom phrases:', e);
     }
   }, []);
+
+  // Load recent islands whenever target language changes
+  useEffect(() => {
+    try {
+      const langKey = `hl_recent_islands_${targetLanguage}`;
+      const storedRecent = localStorage.getItem(langKey);
+      setRecentIslandIds(storedRecent ? JSON.parse(storedRecent) : []);
+    } catch (e) {
+      setRecentIslandIds([]);
+    }
+  }, [targetLanguage]);
 
   // Save guest progress helper
   const saveGuestProgress = (updated: GuestProgress) => {
@@ -1194,7 +1224,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deletePhrase,
         customCategories,
         addCustomCategory,
-        deleteCustomCategory
+        deleteCustomCategory,
+        recentIslandIds
       }}
     >
       {children}
