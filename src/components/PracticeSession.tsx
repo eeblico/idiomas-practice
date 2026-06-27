@@ -24,6 +24,7 @@ export const PracticeSession: React.FC = () => {
     addCustomPhrase,
     addCustomPhrasesBatch,
     updatePhrase,
+    reorderPhrases,
     deletePhrase,
     streak,
     completedToday,
@@ -116,6 +117,7 @@ export const PracticeSession: React.FC = () => {
   const [editPhraseTranslation, setEditPhraseTranslation] = useState('');
   const [editPhraseExplanation, setEditPhraseExplanation] = useState('');
   const [transferIslandId, setTransferIslandId] = useState<string>('');
+  const [editPhraseOrder, setEditPhraseOrder] = useState<number>(1);
   const [isTranslating, setIsTranslating] = useState(false);
   
   const [downloadProgress, setDownloadProgress] = useState<string | null>(null);
@@ -989,6 +991,11 @@ export const PracticeSession: React.FC = () => {
     setEditPhraseTranslation(phrase.translation);
     setEditPhraseExplanation(phrase.explanation || '');
     setTransferIslandId(phrase.category_id);
+    
+    // Find the 1-indexed position of this phrase within its category
+    const categoryPhrases = phrases.filter(p => p.category_id === phrase.category_id);
+    const idx = categoryPhrases.findIndex(p => p.id === phrase.id);
+    setEditPhraseOrder(idx !== -1 ? idx + 1 : 1);
   };
 
   // Edit/Save Phrase handler
@@ -1009,6 +1016,16 @@ export const PracticeSession: React.FC = () => {
       category_id: transferIslandId,
       ...(textChanged ? { audio_url: null } : {})
     });
+
+    if (original) {
+      const categoryPhrases = phrases.filter(p => p.category_id === original.category_id);
+      const originalIndex = categoryPhrases.findIndex(p => p.id === original.id);
+      const originalPos = originalIndex !== -1 ? originalIndex + 1 : 1;
+      
+      if (editPhraseOrder !== originalPos) {
+        reorderPhrases(transferIslandId, editingPhraseId, editPhraseOrder);
+      }
+    }
 
     setEditingPhraseId(null);
     setEditPhraseText('');
@@ -1875,20 +1892,35 @@ export const PracticeSession: React.FC = () => {
                         />
                       </div>
 
-                      <div className="form-group" style={{ marginBottom: '12px' }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Mover para outra Ilha</label>
-                        <select
-                          className="input-text"
-                          style={{ width: '100%', padding: '6px 8px' }}
-                          value={transferIslandId}
-                          onChange={(e) => setTransferIslandId(e.target.value)}
-                        >
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name} {cat.id === activeIslandId ? ' (Ilha Atual)' : ''}
-                            </option>
-                          ))}
-                        </select>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Mover para outra Ilha</label>
+                          <select
+                            className="input-text"
+                            style={{ width: '100%', padding: '6px 8px' }}
+                            value={transferIslandId}
+                            onChange={(e) => setTransferIslandId(e.target.value)}
+                          >
+                            {categories.map(cat => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name} {cat.id === activeIslandId ? ' (Ilha Atual)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Posição (Ordem)</label>
+                          <input
+                            type="number"
+                            className="input-text"
+                            style={{ width: '100%', padding: '6px 8px' }}
+                            min={1}
+                            max={phrases.filter(p => p.category_id === transferIslandId).length + (transferIslandId === phrase.category_id ? 0 : 1)}
+                            value={editPhraseOrder}
+                            onChange={(e) => setEditPhraseOrder(Number(e.target.value))}
+                          />
+                        </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>

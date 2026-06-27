@@ -29,6 +29,7 @@ export interface Phrase {
   audio_url: string | null;
   voice_name: string;
   speed: number;
+  order_index?: number;
 }
 
 export interface LocalReviewItem {
@@ -95,6 +96,7 @@ interface AppContextType {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
   updatePhrase: (phraseId: string, updatedFields: Partial<Phrase>) => void;
+  reorderPhrases: (categoryId: string, phraseId: string, newPositionOneIndexed: number) => void;
   deletePhrase: (phraseId: string) => void;
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
@@ -916,6 +918,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const reorderPhrases = (categoryId: string, phraseId: string, newPositionOneIndexed: number) => {
+    const categoryPhrases = filteredPhrases.filter(p => p.category_id === categoryId);
+    const phraseToMove = categoryPhrases.find(p => p.id === phraseId);
+    if (!phraseToMove) return;
+
+    const remaining = categoryPhrases.filter(p => p.id !== phraseId);
+    const targetIdx = Math.max(0, Math.min(newPositionOneIndexed - 1, remaining.length));
+    const reorderedList = [...remaining];
+    reorderedList.splice(targetIdx, 0, phraseToMove);
+
+    let nextOverrides = { ...phraseOverrides };
+    let nextCustom = [...customPhrases];
+    let overridesChanged = false;
+    let customChanged = false;
+
+    reorderedList.forEach((p, index) => {
+      const newOrder = index + 1;
+      nextOverrides = {
+        ...nextOverrides,
+        [p.id]: {
+          ...nextOverrides[p.id],
+          order_index: newOrder
+        }
+      };
+      overridesChanged = true;
+
+      const isCustom = nextCustom.some(cp => cp.id === p.id);
+      if (isCustom) {
+        nextCustom = nextCustom.map(cp => cp.id === p.id ? { ...cp, order_index: newOrder } : cp);
+        customChanged = true;
+      }
+    });
+
+    if (overridesChanged) {
+      setPhraseOverrides(nextOverrides);
+      localStorage.setItem('hl_phrase_overrides', JSON.stringify(nextOverrides));
+    }
+    if (customChanged) {
+      setCustomPhrases(nextCustom);
+      localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+    }
+  };
+
   const [deletedPhraseIds, setDeletedPhraseIds] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('hl_deleted_phrases');
@@ -997,7 +1042,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return override ? { ...p, ...override } : p;
     });
 
-    return overridden.filter(p => p.language_id === targetLanguage);
+    const langPhrases = overridden.filter(p => p.language_id === targetLanguage);
+
+    return [...langPhrases].sort((a, b) => {
+      const aOrder = a.order_index !== undefined ? a.order_index : 999999;
+      const bOrder = b.order_index !== undefined ? b.order_index : 999999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.id.localeCompare(b.id);
+    });
   }, [phrases, customPhrases, targetLanguage, phraseOverrides, deletedPhraseIds]);
 
   // Filter favorites by active language phrases
@@ -1059,6 +1111,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         toggleTheme,
         updatePhrase,
+        reorderPhrases,
         deletePhrase,
         customCategories,
         addCustomCategory,

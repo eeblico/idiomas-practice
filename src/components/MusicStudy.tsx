@@ -14,6 +14,7 @@ interface Song {
   youtube_url: string;
   lyrics: string;
   translation: string;
+  explanations?: string;
 }
 
 // Preloaded classics for all 7 languages
@@ -214,6 +215,7 @@ export const MusicStudy: React.FC = () => {
   const [newUrl, setNewUrl] = useState('');
   const [newLyrics, setNewLyrics] = useState('');
   const [newTranslation, setNewTranslation] = useState('');
+  const [newExplanations, setNewExplanations] = useState('');
 
   // Local storage lists for music-specific favorites and stars
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -252,6 +254,7 @@ export const MusicStudy: React.FC = () => {
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [editLineText, setEditLineText] = useState('');
   const [editLineTranslation, setEditLineTranslation] = useState('');
+  const [editLineExplanation, setEditLineExplanation] = useState('');
 
   // Single sentence addition states (inside settings modal)
   const [addSingleLyric, setAddSingleLyric] = useState('');
@@ -336,13 +339,15 @@ export const MusicStudy: React.FC = () => {
     if (!activeSong) return [];
     const lyricLines = activeSong.lyrics.split('\n');
     const transLines = activeSong.translation.split('\n');
-    const maxLength = Math.max(lyricLines.length, transLines.length);
+    const explanationLines = (activeSong.explanations || '').split('\n');
+    const maxLength = Math.max(lyricLines.length, transLines.length, explanationLines.length);
 
     const aligned = [];
     for (let i = 0; i < maxLength; i++) {
       aligned.push({
         lyric: lyricLines[i] || '',
-        translation: transLines[i] || ''
+        translation: transLines[i] || '',
+        explanation: explanationLines[i] || ''
       });
     }
     return aligned;
@@ -521,10 +526,11 @@ export const MusicStudy: React.FC = () => {
   };
 
   // --- Line Management (Single Edit, Add, Delete, Batch Import/Export) ---
-  const startEditLine = (originalIdx: number, lyric: string, translation: string) => {
+  const startEditLine = (originalIdx: number, lyric: string, translation: string, explanation: string) => {
     setEditingLineIdx(originalIdx);
     setEditLineText(lyric);
     setEditLineTranslation(translation);
+    setEditLineExplanation(explanation || '');
   };
 
   const saveEditLine = () => {
@@ -532,11 +538,17 @@ export const MusicStudy: React.FC = () => {
 
     const lyricsLines = activeSong.lyrics.split('\n');
     const transLines = activeSong.translation.split('\n');
+    const expLines = (activeSong.explanations || '').split('\n');
 
     lyricsLines[editingLineIdx] = editLineText.trim();
     transLines[editingLineIdx] = editLineTranslation.trim();
 
-    saveUpdatedSongLines(lyricsLines, transLines);
+    while (expLines.length <= editingLineIdx) {
+      expLines.push('');
+    }
+    expLines[editingLineIdx] = editLineExplanation.trim();
+
+    saveUpdatedSongLines(lyricsLines, transLines, expLines);
     setEditingLineIdx(null);
   };
 
@@ -691,13 +703,18 @@ export const MusicStudy: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const saveUpdatedSongLines = (lyrics: string[], translations: string[]) => {
+  const saveUpdatedSongLines = (lyrics: string[], translations: string[], explanations?: string[]) => {
     if (!activeSong) return;
+
+    const finalExplanations = explanations 
+      ? explanations.join('\n') 
+      : activeSong.explanations || '';
 
     const updatedSong: Song = {
       ...activeSong,
       lyrics: lyrics.join('\n'),
-      translation: translations.join('\n')
+      translation: translations.join('\n'),
+      explanations: finalExplanations
     };
 
     // Update state
@@ -877,6 +894,7 @@ export const MusicStudy: React.FC = () => {
     setNewUrl('');
     setNewLyrics('');
     setNewTranslation('');
+    setNewExplanations('');
   };
 
   const handleStartEditSong = (song: Song, e?: React.MouseEvent) => {
@@ -887,6 +905,7 @@ export const MusicStudy: React.FC = () => {
     setNewUrl(song.youtube_url);
     setNewLyrics(song.lyrics);
     setNewTranslation(song.translation);
+    setNewExplanations(song.explanations || '');
     setAddModalOpen(true);
   };
 
@@ -909,7 +928,8 @@ export const MusicStudy: React.FC = () => {
             artist: newArtist.trim(),
             youtube_url: newUrl.trim(),
             lyrics: newLyrics.trim(),
-            translation: newTranslation.trim()
+            translation: newTranslation.trim(),
+            explanations: newExplanations.trim()
           };
         }
         return s;
@@ -924,7 +944,8 @@ export const MusicStudy: React.FC = () => {
           artist: newArtist.trim(),
           youtube_url: newUrl.trim(),
           lyrics: newLyrics.trim(),
-          translation: newTranslation.trim()
+          translation: newTranslation.trim(),
+          explanations: newExplanations.trim()
         });
       }
 
@@ -939,7 +960,8 @@ export const MusicStudy: React.FC = () => {
         artist: newArtist.trim(),
         youtube_url: newUrl.trim(),
         lyrics: newLyrics.trim(),
-        translation: newTranslation.trim()
+        translation: newTranslation.trim(),
+        explanations: newExplanations.trim()
       };
 
       const stored = localStorage.getItem('hl_custom_songs');
@@ -1545,6 +1567,11 @@ export const MusicStudy: React.FC = () => {
                                         <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
                                           {line.translation}
                                         </span>
+                                        {line.explanation && (
+                                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: '85%' }}>
+                                            💡 {line.explanation}
+                                          </span>
+                                        )}
                                       </div>
 
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '20px' }}>
@@ -1684,6 +1711,17 @@ export const MusicStudy: React.FC = () => {
                                   />
                                 </div>
 
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '0.7rem' }}>Descrição / Nota Explicativa (Opcional)</label>
+                                  <input 
+                                    type="text"
+                                    className="input-text"
+                                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
+                                    value={editLineExplanation}
+                                    onChange={(e) => setEditLineExplanation(e.target.value)}
+                                  />
+                                </div>
+
                                 <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                                   <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>
                                     Salvar Alterações
@@ -1728,7 +1766,7 @@ export const MusicStudy: React.FC = () => {
 
                                   {/* Edit Line button */}
                                   <button 
-                                    onClick={(e) => { e.stopPropagation(); startEditLine(line.originalIdx, line.lyric, line.translation); }}
+                                    onClick={(e) => { e.stopPropagation(); startEditLine(line.originalIdx, line.lyric, line.translation, line.explanation); }}
                                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
                                     title="Editar linha"
                                   >
@@ -1760,16 +1798,23 @@ export const MusicStudy: React.FC = () => {
                                         {line.translation}
                                       </span>
                                       {isCardRevealed ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>
-                                            {line.lyric}
-                                          </span>
-                                          <button 
-                                            onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                                          >
-                                            <EyeOff size={12} />
-                                          </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>
+                                              {line.lyric}
+                                            </span>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
+                                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                            >
+                                              <EyeOff size={12} />
+                                            </button>
+                                          </div>
+                                          {line.explanation && (
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                              💡 {line.explanation}
+                                            </span>
+                                          )}
                                         </div>
                                       ) : (
                                         <button 
@@ -1788,16 +1833,23 @@ export const MusicStudy: React.FC = () => {
                                         {line.lyric}
                                       </span>
                                       {isCardRevealed ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                            {line.translation}
-                                          </span>
-                                          <button 
-                                            onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
-                                          >
-                                            <EyeOff size={12} />
-                                          </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                              {line.translation}
+                                            </span>
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
+                                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                            >
+                                              <EyeOff size={12} />
+                                            </button>
+                                          </div>
+                                          {line.explanation && (
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                              💡 {line.explanation}
+                                            </span>
+                                          )}
                                         </div>
                                       ) : (
                                         <button 
@@ -2340,7 +2392,18 @@ export const MusicStudy: React.FC = () => {
                   </div>
                 </div>
 
-                <button type="submit" className="btn btn-primary" style={{ marginTop: '10px', padding: '12px' }}>
+                <div className="form-group" style={{ marginTop: '12px' }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Notas/Descrições das Sentenças (Opcional, uma por linha)</label>
+                  <textarea 
+                    className="input-text" 
+                    style={{ width: '100%', minHeight: '100px', resize: 'vertical', fontFamily: 'monospace', fontSize: '0.8rem' }}
+                    placeholder="Nota cultural/explicativa para a linha 1&#10;Nota explicativa para a linha 2..." 
+                    value={newExplanations}
+                    onChange={(e) => setNewExplanations(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ marginTop: '14px', padding: '12px' }}>
                   {editingSongId ? 'Salvar Alterações' : 'Salvar Música na Coleção'}
                 </button>
               </form>
