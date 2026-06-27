@@ -155,7 +155,7 @@ export const PracticeSession: React.FC = () => {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [translationEnabled, setTranslationEnabled] = useState(true);
+  const [translationEnabled, setTranslationEnabled] = useState(false);
   
   const currentRepRef = useRef<number>(1);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1205,6 +1205,16 @@ export const PracticeSession: React.FC = () => {
                 title="Ocultar sentenças no idioma e mostrar traduções"
               >
                 <MessageSquare size={16} />
+              </button>
+
+              {/* Toggle Auto-reveal Translation (Eye Icon) */}
+              <button 
+                className={`btn-icon ${translationEnabled ? 'active' : ''}`}
+                style={{ width: '36px', height: '36px' }}
+                onClick={() => setTranslationEnabled(prev => !prev)}
+                title={translationEnabled ? "Revelação automática de tradução ATIVADA durante reprodução de áudio" : "Revelação automática de tradução DESATIVADA durante reprodução de áudio"}
+              >
+                {translationEnabled ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
 
               {/* Quick speed selector cycle */}
