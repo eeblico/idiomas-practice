@@ -19,41 +19,6 @@ interface Song {
 // Preloaded classics for all 7 languages
 const PRELOADED_SONGS: Song[] = [
   {
-    id: 'preloaded-en-yesterday',
-    language_id: 'en',
-    title: 'Yesterday',
-    artist: 'The Beatles',
-    youtube_url: 'https://www.youtube.com/watch?v=jo505ZyaCbA',
-    lyrics: `Yesterday, all my troubles seemed so far away
-Now it looks as though they're here to stay
-Oh, I believe in yesterday
-
-Suddenly, I'm not half the man I used to be
-There's a shadow hanging over me
-Oh, yesterday came suddenly
-
-Why she had to go, I don't know, she wouldn't say
-I said something wrong, now I long for yesterday
-
-Yesterday, love was such an easy game to play
-Now I need a place to hide away
-Oh, I believe in yesterday`,
-    translation: `Ontem, todos os meus problemas pareciam tão distantes
-Agora parece que eles estão aqui para ficar
-Oh, eu acredito no ontem
-
-De repente, não sou nem metade do homem que eu costumava ser
-Há uma sombra pairando sobre mim
-Oh, o ontem veio de repente
-
-Por que ela teve que ir, eu não sei, ela não quis dizer
-Eu disse algo errado, agora eu anseio pelo ontem
-
-Ontem, o amor era um jogo tão fácil de se jogar
-Agora eu preciso de um lugar para me esconder
-Oh, eu acredito no ontem`
-  },
-  {
     id: 'preloaded-es-camisa',
     language_id: 'es',
     title: 'La Camisa Negra',
@@ -335,9 +300,20 @@ export const MusicStudy: React.FC = () => {
   // --- Load Songs ---
   useEffect(() => {
     const loadSongs = () => {
-      const stored = localStorage.getItem('hl_custom_songs');
-      const custom: Song[] = stored ? JSON.parse(stored) : [];
-      setSongs([...PRELOADED_SONGS, ...custom]);
+      let stored = localStorage.getItem('hl_custom_songs');
+      if (stored === null) {
+        // Initial setup: save preloaded songs to localStorage so they are editable
+        localStorage.setItem('hl_custom_songs', JSON.stringify(PRELOADED_SONGS));
+        stored = JSON.stringify(PRELOADED_SONGS);
+      }
+      let custom: Song[] = JSON.parse(stored);
+      // Ensure 'preloaded-en-yesterday' is completely removed if present in custom database
+      const cleaned = custom.filter(s => s.id !== 'preloaded-en-yesterday');
+      if (cleaned.length !== custom.length) {
+        localStorage.setItem('hl_custom_songs', JSON.stringify(cleaned));
+        custom = cleaned;
+      }
+      setSongs(custom);
     };
     loadSongs();
   }, [addModalOpen]);
