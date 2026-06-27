@@ -237,6 +237,7 @@ export const MusicStudy: React.FC = () => {
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [songSettingsOpen, setSongSettingsOpen] = useState(false);
+  const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [studyTab, setStudyTab] = useState<'lyrics' | 'cloze' | 'reorder'>('lyrics');
 
   // Add song form states
@@ -887,6 +888,27 @@ export const MusicStudy: React.FC = () => {
     setReorderSubmitted(false);
   };
 
+  const handleCloseAddModal = () => {
+    setAddModalOpen(false);
+    setEditingSongId(null);
+    setNewTitle('');
+    setNewArtist('');
+    setNewUrl('');
+    setNewLyrics('');
+    setNewTranslation('');
+  };
+
+  const handleStartEditSong = (song: Song, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingSongId(song.id);
+    setNewTitle(song.title);
+    setNewArtist(song.artist);
+    setNewUrl(song.youtube_url);
+    setNewLyrics(song.lyrics);
+    setNewTranslation(song.translation);
+    setAddModalOpen(true);
+  };
+
   const handleAddSong = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim() || !newUrl.trim() || !newLyrics.trim() || !newTranslation.trim()) {
@@ -894,29 +916,59 @@ export const MusicStudy: React.FC = () => {
       return;
     }
 
-    const newSong: Song = {
-      id: `custom-song-${Date.now()}`,
-      language_id: targetLanguage,
-      title: newTitle.trim(),
-      artist: newArtist.trim(),
-      youtube_url: newUrl.trim(),
-      lyrics: newLyrics.trim(),
-      translation: newTranslation.trim()
-    };
+    if (editingSongId) {
+      // Edit Flow
+      const stored = localStorage.getItem('hl_custom_songs');
+      const custom: Song[] = stored ? JSON.parse(stored) : [];
+      const updated = custom.map(s => {
+        if (s.id === editingSongId) {
+          return {
+            ...s,
+            title: newTitle.trim(),
+            artist: newArtist.trim(),
+            youtube_url: newUrl.trim(),
+            lyrics: newLyrics.trim(),
+            translation: newTranslation.trim()
+          };
+        }
+        return s;
+      });
+      localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
 
-    const stored = localStorage.getItem('hl_custom_songs');
-    const custom: Song[] = stored ? JSON.parse(stored) : [];
-    const updated = [newSong, ...custom];
-    localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+      // Update activeSong state if it's the one being edited
+      if (activeSong && activeSong.id === editingSongId) {
+        setActiveSong({
+          ...activeSong,
+          title: newTitle.trim(),
+          artist: newArtist.trim(),
+          youtube_url: newUrl.trim(),
+          lyrics: newLyrics.trim(),
+          translation: newTranslation.trim()
+        });
+      }
 
-    setNewTitle('');
-    setNewArtist('');
-    setNewUrl('');
-    setNewLyrics('');
-    setNewTranslation('');
-    setAddModalOpen(false);
+      handleCloseAddModal();
+      alert(`Música "${newTitle}" atualizada com sucesso!`);
+    } else {
+      // Add Flow
+      const newSong: Song = {
+        id: `custom-song-${Date.now()}`,
+        language_id: targetLanguage,
+        title: newTitle.trim(),
+        artist: newArtist.trim(),
+        youtube_url: newUrl.trim(),
+        lyrics: newLyrics.trim(),
+        translation: newTranslation.trim()
+      };
 
-    alert(`Música "${newSong.title}" adicionada com sucesso!`);
+      const stored = localStorage.getItem('hl_custom_songs');
+      const custom: Song[] = stored ? JSON.parse(stored) : [];
+      const updated = [newSong, ...custom];
+      localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+
+      handleCloseAddModal();
+      alert(`Música "${newSong.title}" adicionada com sucesso!`);
+    }
   };
 
   const handleDeleteSong = (songId: string, e: React.MouseEvent) => {
@@ -1028,14 +1080,25 @@ export const MusicStudy: React.FC = () => {
                     </span>
 
                     {!isPreloaded && (
-                      <button 
-                        onClick={(e) => handleDeleteSong(song.id, e)}
-                        className="btn-icon"
-                        style={{ color: 'var(--danger)', background: 'none', border: 'none', padding: '4px' }}
-                        title="Excluir música"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button 
+                          onClick={(e) => handleStartEditSong(song, e)}
+                          className="btn-icon"
+                          style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          title="Editar música"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        
+                        <button 
+                          onClick={(e) => handleDeleteSong(song.id, e)}
+                          className="btn-icon"
+                          style={{ color: 'var(--danger)', background: 'none', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          title="Excluir música"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1081,6 +1144,27 @@ export const MusicStudy: React.FC = () => {
                   {activeSong.title} — <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{activeSong.artist}</span>
                 </h4>
               </div>
+              {!activeSong.id.startsWith('preloaded-') && (
+                <button 
+                  className="btn-icon"
+                  onClick={() => handleStartEditSong(activeSong)}
+                  title="Editar Informações da Música"
+                  style={{ 
+                    width: '38px', 
+                    height: '38px', 
+                    background: 'var(--bg-secondary)', 
+                    border: '1px solid var(--border)', 
+                    borderRadius: '50%', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    color: 'var(--accent)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Edit2 size={18} />
+                </button>
+              )}
               <button 
                 className="btn-icon"
                 onClick={() => setSongSettingsOpen(true)}
@@ -1978,7 +2062,7 @@ export const MusicStudy: React.FC = () => {
 
       {/* ── Add Custom Song Modal ── */}
       {addModalOpen && (
-        <div className="practice-modal-overlay" onClick={() => setAddModalOpen(false)}>
+        <div className="practice-modal-overlay" onClick={handleCloseAddModal}>
           <div className="practice-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
             
             {/* Modal Header */}
@@ -1991,12 +2075,12 @@ export const MusicStudy: React.FC = () => {
                   <Music size={18} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>Adicionar Nova Música</h3>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Crie um novo ambiente de estudo musical</span>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>{editingSongId ? 'Editar Detalhes da Música' : 'Adicionar Nova Música'}</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{editingSongId ? 'Atualize as informações do seu ambiente de estudo musical' : 'Crie um novo ambiente de estudo musical'}</span>
                 </div>
               </div>
               <button 
-                onClick={() => setAddModalOpen(false)}
+                onClick={handleCloseAddModal}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '4px' }}
               >
                 <X size={18} />
@@ -2082,7 +2166,7 @@ export const MusicStudy: React.FC = () => {
                 </div>
 
                 <button type="submit" className="btn btn-primary" style={{ marginTop: '10px', padding: '12px' }}>
-                  Salvar Música na Coleção
+                  {editingSongId ? 'Salvar Alterações' : 'Salvar Música na Coleção'}
                 </button>
               </form>
             </div>
