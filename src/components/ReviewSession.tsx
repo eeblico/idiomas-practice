@@ -96,6 +96,7 @@ export const ReviewSession: React.FC = () => {
   const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false);
   const [showTranslationByDefault, setShowTranslationByDefault] = useState<boolean>(false);
   const [revealTranslationOnly, setRevealTranslationOnly] = useState<boolean>(false);
+  const [revealTextOnly, setRevealTextOnly] = useState<boolean>(false);
 
   // Library tab filter states
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -402,12 +403,14 @@ export const ReviewSession: React.FC = () => {
   const currentPhrase = sessionQueue[currentIndex];
   useEffect(() => {
     if (currentPhrase && sessionActive && !completed && !isEditingCard) {
-      const timer = setTimeout(() => {
-        playPhraseAudio(currentPhrase);
-      }, 300);
-      return () => clearTimeout(timer);
+      if (reviewMode !== 'flashcard') {
+        const timer = setTimeout(() => {
+          playPhraseAudio(currentPhrase);
+        }, 300);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [currentPhrase?.id, sessionActive, completed, isEditingCard]);
+  }, [currentPhrase?.id, sessionActive, completed, isEditingCard, reviewMode]);
 
   // Card elapsed timer logic
   useEffect(() => {
@@ -442,6 +445,7 @@ export const ReviewSession: React.FC = () => {
     setSecondsElapsed(0);
     setRevealTranslationClue(false);
     setRevealTranslationOnly(false);
+    setRevealTextOnly(false);
 
     // Cloze Game Init
     const cloze = getClozeSentence(currentPhrase.text);
@@ -974,9 +978,65 @@ export const ReviewSession: React.FC = () => {
                     </div>
                   ) : (
                     <div className="fade-in" style={{ textAlign: 'center', cursor: 'pointer', width: '100%' }} onClick={handleReveal}>
-                      <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', marginBottom: '20px' }}>
-                        {currentPhrase.text}
-                      </div>
+                      
+                      {/* Conditional target sentence text display */}
+                      {revealTextOnly ? (
+                        <div className="fade-in" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', marginBottom: '20px' }}>
+                          {currentPhrase.text}
+                        </div>
+                      ) : (
+                        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Card Oculto</div>
+                          
+                          {/* Play audio without revealing */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playPhraseAudio(currentPhrase);
+                            }}
+                            className="btn btn-primary"
+                            style={{
+                              padding: '8px 18px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              borderRadius: '30px',
+                              border: 'none',
+                              color: 'white',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Volume2 size={16} /> Ouvir Áudio (Sem Revelar)
+                          </button>
+
+                          {/* Reveal sentence text button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRevealTextOnly(true);
+                            }}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '6px 14px',
+                              fontSize: '0.72rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              borderRadius: '20px',
+                              border: '1px solid var(--border)',
+                              background: 'var(--bg-tertiary)',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Eye size={12} /> Mostrar Sentença
+                          </button>
+                        </div>
+                      )}
 
                       {/* Conditional translation display */}
                       {(showTranslationByDefault || revealTranslationOnly) ? (
@@ -1000,7 +1060,9 @@ export const ReviewSession: React.FC = () => {
                             margin: '0 auto 24px',
                             borderRadius: '20px',
                             border: '1px solid var(--border)',
-                            background: 'var(--bg-tertiary)'
+                            background: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer'
                           }}
                           title="Mostrar tradução para este card"
                         >
