@@ -4,7 +4,7 @@ import { supabase } from '../services/supabase';
 import { 
   Volume2, Star, ArrowLeft, RefreshCw, CheckCircle, 
   Clock, BookOpen, Sparkles, Sliders, Settings, AlertCircle, Plus, Edit2,
-  Languages
+  Languages, HelpCircle, Info, Shuffle, Eye, EyeOff, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 const FIBONACCI_SEQUENCE = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377];
@@ -41,16 +41,21 @@ export const ReviewSession: React.FC = () => {
     user,
     categories,
     updatePhrase,
-    targetLanguage
+    targetLanguage,
+    phraseStars,
+    updatePhraseStars
   } = useApp();
 
   // Navigation states
   const [sessionActive, setSessionActive] = useState(false);
-  const [sessionType, setSessionType] = useState<'due' | 'new' | 'all'>('due');
+  const [sessionType, setSessionType] = useState<'due' | 'new' | 'all' | 'starred'>('due');
 
   // Custom session config states
   const [reviewCategoryFilter, setReviewCategoryFilter] = useState<string>('all');
   const [newCardsLimit, setNewCardsLimit] = useState<number>(10);
+  const [starsFilter, setStarsFilter] = useState<string>('all');
+  const [shuffleQueue, setShuffleQueue] = useState<boolean>(true);
+  const [showAlgorithmHelp, setShowAlgorithmHelp] = useState<boolean>(false);
 
   // Card edit form states
   const [isEditingCard, setIsEditingCard] = useState(false);
@@ -78,9 +83,20 @@ export const ReviewSession: React.FC = () => {
   const nowTime = useMemo(() => new Date().getTime(), [sessionActive]);
 
   const filteredPhrasesForReview = useMemo(() => {
-    if (reviewCategoryFilter === 'all') return phrases;
-    return phrases.filter(p => p.category_id === reviewCategoryFilter);
-  }, [phrases, reviewCategoryFilter]);
+    let list = phrases;
+    if (reviewCategoryFilter !== 'all') {
+      list = list.filter(p => p.category_id === reviewCategoryFilter);
+    }
+    if (starsFilter !== 'all') {
+      if (starsFilter === 'starred') {
+        list = list.filter(p => (phraseStars[p.id] || 0) > 0);
+      } else {
+        const starVal = Number(starsFilter);
+        list = list.filter(p => (phraseStars[p.id] || 0) === starVal);
+      }
+    }
+    return list;
+  }, [phrases, reviewCategoryFilter, starsFilter, phraseStars]);
 
   // --- Dashboard Statistics Calculations ---
   const stats = useMemo(() => {
@@ -99,14 +115,19 @@ export const ReviewSession: React.FC = () => {
       return item && new Date(item.next_review_date).getTime() > nowTime;
     });
 
+    // 4. Starred Phrases (Estrelados)
+    const starred = filteredPhrasesForReview.filter(p => (phraseStars[p.id] || 0) > 0);
+
     return {
       dueCount: due.length,
       newCount: newCards.length,
       learnedCount: learned.length,
+      starredCount: starred.length,
       duePhrases: due,
-      newPhrases: newCards
+      newPhrases: newCards,
+      starredPhrases: starred
     };
-  }, [filteredPhrasesForReview, reviewItems, nowTime]);
+  }, [filteredPhrasesForReview, reviewItems, nowTime, phraseStars]);
 
   // Audio Playback Helpers
   const getAudioUrl = (phrase: Phrase): string | null => {
@@ -215,26 +236,25 @@ export const ReviewSession: React.FC = () => {
   }, [currentPhrase?.id, sessionActive, completed, isEditingCard]);
 
   // Start Session Actions
-  const handleStartSession = (type: 'due' | 'new' | 'all') => {
+  const handleStartSession = (type: 'due' | 'new' | 'all' | 'starred') => {
     let list: Phrase[] = [];
     setSessionType(type);
 
     if (type === 'due') {
       list = [...stats.duePhrases];
     } else if (type === 'new') {
-      // Pick up to customized limit new cards to study and introduce them
       list = stats.newPhrases.slice(0, newCardsLimit);
+    } else if (type === 'starred') {
+      list = [...stats.starredPhrases];
     } else {
-      // Review everything that has been seen/introduced in the filtered set
       list = filteredPhrasesForReview.filter(p => reviewItems[p.id]);
     }
 
     if (list.length === 0) return;
 
-    // Shuffle queue
-    const shuffled = list.sort(() => 0.5 - Math.random());
-    setSessionQueue(shuffled);
-    setInitialQueueLength(shuffled.length);
+    const finalQueue = shuffleQueue ? [...list].sort(() => 0.5 - Math.random()) : [...list];
+    setSessionQueue(finalQueue);
+    setInitialQueueLength(finalQueue.length);
     setCurrentIndex(0);
     setRevealed(false);
     setCompleted(false);
@@ -402,6 +422,7 @@ export const ReviewSession: React.FC = () => {
     setCompleted(false);
   };
 
+    const [filtersExpanded, setFiltersExpanded] = useState<boolean>(false);
   const isFavorite = currentPhrase ? favorites.includes(currentPhrase.id) : false;
 
   // --- Active Review Session View ---
@@ -451,7 +472,7 @@ export const ReviewSession: React.FC = () => {
           </button>
           
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Clock size={16} /> {sessionType === 'new' ? 'Estudo de Novos' : 'Revisão'} ({currentIndex + 1}/{sessionQueue.length})
+            <Clock size={16} /> {sessionType === 'new' ? 'Estudo de Novos' : sessionType === 'starred' ? 'Estrelados' : 'Revisão'} ({currentIndex + 1}/{sessionQueue.length})
           </span>
         </div>
 
@@ -632,25 +653,53 @@ export const ReviewSession: React.FC = () => {
               </div>
             ) : revealed ? (
               <div className="fade-in" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <div className="flashcard-target">
+                <div className="flashcard-target" style={{ marginBottom: '12px' }}>
                   <span style={{ fontSize: '1.8rem', fontWeight: 800 }}>{currentPhrase.text}</span>
-                  <div className="audio-waves-container" onClick={(e) => { e.stopPropagation(); playPhraseAudio(currentPhrase); }} style={{ cursor: 'pointer', marginTop: '12px' }}>
-                    <Volume2 size={22} style={{ color: isPlaying ? 'var(--accent)' : 'var(--text-secondary)' }} />
-                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
-                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
-                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
-                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
-                    <div className={`audio-wave ${isPlaying ? 'playing' : ''}`} />
+                  
+                  {/* Interactive Audio Wave */}
+                  <div 
+                    className="audio-waves-container" 
+                    onClick={(e) => { e.stopPropagation(); playPhraseAudio(currentPhrase); }} 
+                    style={{ cursor: 'pointer', marginTop: '12px' }}
+                    title="Ouvir pronúncia"
+                  >
+                    <Volume2 size={20} style={{ color: isPlaying ? 'var(--accent)' : 'var(--text-secondary)', transition: 'color 0.2s' }} />
+                    <div className={`audio-wave-bar ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave-bar ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave-bar ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave-bar ${isPlaying ? 'playing' : ''}`} />
+                    <div className={`audio-wave-bar ${isPlaying ? 'playing' : ''}`} />
                   </div>
                 </div>
                 
-                <div className="flashcard-translation" style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginTop: '16px' }}>
+                <div className="flashcard-translation" style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginTop: '8px', marginBottom: '8px' }}>
                   {currentPhrase.translation}
                 </div>
 
+                {/* 1-5 Mastery Stars Picker on card back */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', margin: '14px 0' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nível de Domínio</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[1, 2, 3, 4, 5].map(star => {
+                      const isStarred = (phraseStars[currentPhrase.id] || 0) >= star;
+                      return (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); updatePhraseStars(currentPhrase.id, star); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                          title={`Marcar como ${star} estrelas`}
+                        >
+                          <Star size={18} fill={isStarred ? '#eab308' : 'none'} stroke={isStarred ? '#eab308' : 'var(--text-muted)'} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {currentPhrase.explanation && (
-                  <div className="flashcard-explanation" style={{ marginTop: '20px', maxWidth: '550px' }}>
-                    {currentPhrase.explanation}
+                  <div className="flashcard-explanation" style={{ marginTop: '12px', maxWidth: '550px', fontSize: '0.8rem', padding: '10px 16px' }}>
+                    💡 {currentPhrase.explanation}
                   </div>
                 )}
               </div>
@@ -696,22 +745,22 @@ export const ReviewSession: React.FC = () => {
               </div>
               
               <div className="rating-buttons-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                <button className="rating-btn rating-btn-hard" onClick={() => handleRateDifficulty('hard')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
-                  <span style={{ fontWeight: 800 }}>Difícil</span>
+                <button className="rating-btn rating-btn-hard" onClick={() => handleRateDifficulty('hard')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>🔴 Difícil</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
                     {reviewAlgorithm === 'fibonacci' ? 'Rever hoje' : `Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'hard'))}`}
                   </span>
                 </button>
                 
-                <button className="rating-btn rating-btn-medium" onClick={() => handleRateDifficulty('medium')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
-                  <span style={{ fontWeight: 800 }}>Médio</span>
+                <button className="rating-btn rating-btn-medium" onClick={() => handleRateDifficulty('medium')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>&#128993; Médio</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
                     {`Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'medium'))}`}
                   </span>
                 </button>
                 
-                <button className="rating-btn rating-btn-easy" onClick={() => handleRateDifficulty('easy')} style={{ padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
-                  <span style={{ fontWeight: 800 }}>Fácil</span>
+                <button className="rating-btn rating-btn-easy" onClick={() => handleRateDifficulty('easy')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px 4px', borderRadius: 'var(--radius-md)' }}>
+                  <span style={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>🟢 Fácil</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>
                     {`Rever em ${formatInterval(getNextIntervalDays(currentPhrase.id, 'easy'))}`}
                   </span>
@@ -729,236 +778,254 @@ export const ReviewSession: React.FC = () => {
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* Dashboard Title Header */}
-      <div>
-        <h2 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Revisão Espaçada ⌛</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
-          Otimize sua retenção de vocabulário e evite o esquecimento com métodos comprovados.
-        </p>
+      {/* Dashboard Title Header & Algorithm Picker */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Revisão Espaçada ⌛</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+            Otimize sua retenção de vocabulário e evite o esquecimento com métodos comprovados.
+          </p>
+        </div>
+
+        {/* Algorithm switch pill widget */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 255, 255, 0.02)', padding: '6px 10px', borderRadius: '30px', border: '1px solid var(--border)' }}>
+          <Sliders size={14} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Algoritmo:</span>
+          
+          <button
+            onClick={() => setReviewAlgorithm(reviewAlgorithm === 'fibonacci' ? 'sm2' : 'fibonacci')}
+            style={{
+              background: 'var(--accent)',
+              border: 'none',
+              color: 'white',
+              borderRadius: '20px',
+              padding: '4px 12px',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}
+          >
+            {reviewAlgorithm === 'fibonacci' ? '📈 Fibonacci' : '⚙️ SuperMemo SM2'}
+          </button>
+
+          <button 
+            type="button" 
+            onClick={() => setShowAlgorithmHelp(true)} 
+            style={{ background: 'none', border: 'none', display: 'flex', padding: '2px', cursor: 'pointer', color: 'var(--text-muted)' }}
+            title="Como funcionam os algoritmos?"
+          >
+            <HelpCircle size={15} />
+          </button>
+        </div>
       </div>
 
       {/* Spaced Repetition Stats Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
         
         {/* Due Cards Box */}
-        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid var(--accent)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Agendadas
+        <div 
+          className="review-glow-card amber" 
+          onClick={() => stats.dueCount > 0 && handleStartSession('due')}
+          style={{ opacity: stats.dueCount > 0 ? 1 : 0.6 }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Agendadas</span>
+            <Clock size={16} style={{ color: 'var(--accent)' }} />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.dueCount}</div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases para revisar hoje</span>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'white' }}>{stats.dueCount}</div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>revisar hoje (due)</span>
         </div>
 
         {/* New Cards Box */}
-        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #3b82f6', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Novas
+        <div 
+          className="review-glow-card blue" 
+          onClick={() => stats.newCount > 0 && handleStartSession('new')}
+          style={{ opacity: stats.newCount > 0 ? 1 : 0.6 }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Novas</span>
+            <Sparkles size={16} style={{ color: '#3b82f6' }} />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.newCount}</div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases prontas para iniciar</span>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'white' }}>{stats.newCount}</div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>prontas para iniciar</span>
         </div>
 
         {/* Learned Cards Box */}
-        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid var(--success)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Em Aprendizado
+        <div 
+          className="review-glow-card green" 
+          onClick={() => stats.learnedCount > 0 && handleStartSession('all')}
+          style={{ opacity: stats.learnedCount > 0 ? 1 : 0.6 }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Em Rotação</span>
+            <BookOpen size={16} style={{ color: 'var(--success)' }} />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{stats.learnedCount}</div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>frases na rotação de fixação</span>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'white' }}>{stats.learnedCount}</div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>cards ativos estudados</span>
+        </div>
+
+        {/* Starred Cards Box */}
+        <div 
+          className="review-glow-card gold" 
+          onClick={() => stats.starredCount > 0 && handleStartSession('starred')}
+          style={{ opacity: stats.starredCount > 0 ? 1 : 0.6 }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estreladas</span>
+            <Star size={16} fill="#eab308" stroke="#eab308" />
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'white' }}>{stats.starredCount}</div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>cards marcados nas ilhas</span>
         </div>
       </div>
 
-      {/* Algorithm Configurator Box */}
-      <div className="glass-card" style={{ padding: '20px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
-              <Sliders size={18} />
-            </div>
-            <div>
-              <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>Algoritmo de Aprendizado</h4>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Escolha o método matemático de repetição</span>
-            </div>
-          </div>
+      {/* Accordion / Expandable Configs Drawer */}
+      <div className="glass-card" style={{ border: '1px solid var(--border)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <button
+          type="button"
+          onClick={() => setFiltersExpanded(!filtersExpanded)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            cursor: 'pointer',
+            fontWeight: 800,
+            fontSize: '0.88rem'
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Settings size={16} style={{ color: 'var(--accent)' }} /> Ajustar Filtros & Embaralhamento
+          </span>
+          {filtersExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
 
-          {/* Toggle Switches */}
-          <div style={{ display: 'flex', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: '20px', border: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setReviewAlgorithm('fibonacci')}
-              style={{
-                background: reviewAlgorithm === 'fibonacci' ? '#10b981' : 'none',
-                border: 'none',
-                color: reviewAlgorithm === 'fibonacci' ? 'white' : 'var(--text-secondary)',
-                borderRadius: '16px',
-                padding: '6px 14px',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              Fibonacci Spacing
-            </button>
-            <button
-              onClick={() => setReviewAlgorithm('sm2')}
-              style={{
-                background: reviewAlgorithm === 'sm2' ? '#10b981' : 'none',
-                border: 'none',
-                color: reviewAlgorithm === 'sm2' ? 'white' : 'var(--text-secondary)',
-                borderRadius: '16px',
-                padding: '6px 14px',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              SuperMemo SM2
-            </button>
-          </div>
-        </div>
-
-        {/* Algorithm detail paragraph */}
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0, paddingLeft: '46px' }}>
-          {reviewAlgorithm === 'fibonacci' ? (
-            <>
-              <strong>Repetição Baseada em Fibonacci:</strong> Utiliza intervalos de retenção associados à sequência de Fibonacci (1, 2, 3, 5, 8, 13 dias...). Em caso de erro, você retrocede apenas 2 níveis, reforçando a memória sem zerar o progresso conquistado. Recomendado para o aprendizado de idiomas com foco no longo prazo.
-            </>
-          ) : (
-            <>
-              <strong>Algoritmo Clássico SM2:</strong> Utiliza fatores de facilidade ajustáveis para calcular os próximos intervalos. Respostas corretas multiplicam o intervalo de acordo com o nível de facilidade anterior. Se você errar, o card é resetado e retorna ao início (1 dia). Clássico e estruturado.
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* Study Session Start Selection Card */}
-      <div className="glass-card" style={{ padding: '24px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(255, 255, 255, 0.01)' }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <BookOpen size={18} style={{ color: 'var(--accent)' }} /> Iniciar Sessão de Estudo
-        </h3>
-
-        {/* Customization filters for Review Sessions */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '4px' }}>
-          {/* Category Filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '180px' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Filtrar por Ilha
-            </span>
-            <select
-              value={reviewCategoryFilter}
-              onChange={(e) => setReviewCategoryFilter(e.target.value)}
-              className="input-text"
-              style={{ width: '100%', padding: '8px 10px', fontSize: '0.82rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'white' }}
-            >
-              <option value="all">Todas as Ilhas</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* New Cards Limit */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '150px' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Limite de Novos Cards
-            </span>
-            <select
-              value={newCardsLimit}
-              onChange={(e) => setNewCardsLimit(Number(e.target.value))}
-              className="input-text"
-              style={{ width: '100%', padding: '8px 10px', fontSize: '0.82rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'white' }}
-            >
-              {[5, 10, 15, 20, 25, 30, 40, 50].map(val => (
-                <option key={val} value={val}>{val} cards</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-          
-          {/* Option A: Review Due */}
-          <div 
-            onClick={() => stats.dueCount > 0 && handleStartSession('due')}
-            className={`glass-card ${stats.dueCount > 0 ? 'hover-scale' : ''}`}
-            style={{ 
-              padding: '16px', 
-              cursor: stats.dueCount > 0 ? 'pointer' : 'not-allowed', 
-              opacity: stats.dueCount > 0 ? 1 : 0.4, 
-              border: '1px solid var(--border)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '12px'
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 800 }}>Revisar Agendados</h4>
-                <span className="badge badge-easy" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>{stats.dueCount} cards</span>
+        {filtersExpanded && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: '4px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+              
+              {/* Filter by Island dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filtrar por Ilha</span>
+                <select
+                  value={reviewCategoryFilter}
+                  onChange={(e) => setReviewCategoryFilter(e.target.value)}
+                  className="input-text"
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '0.78rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                >
+                  <option value="all">Todas as Ilhas</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.35 }}>
-                Pratique os cards agendados para hoje. Foco no fortalecimento da sua curva de esquecimento ativa.
-              </p>
-            </div>
-            
-            <button 
-              disabled={stats.dueCount === 0} 
-              className="btn btn-primary" 
-              style={{ padding: '8px 12px', fontSize: '0.75rem', width: '100%', borderRadius: '20px' }}
-            >
-              Iniciar Revisões
-            </button>
-          </div>
 
-          {/* Option B: Study New */}
-          <div 
-            onClick={() => stats.newCount > 0 && handleStartSession('new')}
-            className={`glass-card ${stats.newCount > 0 ? 'hover-scale' : ''}`}
-            style={{ 
-              padding: '16px', 
-              cursor: stats.newCount > 0 ? 'pointer' : 'not-allowed', 
-              opacity: stats.newCount > 0 ? 1 : 0.4, 
-              border: '1px solid var(--border)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: '12px'
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 800 }}>Estudar Novos</h4>
-                <span className="badge badge-easy" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>{stats.newCount} disponíveis</span>
+              {/* Limit of new cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Novos Cards por Sessão</span>
+                <select
+                  value={newCardsLimit}
+                  onChange={(e) => setNewCardsLimit(Number(e.target.value))}
+                  className="input-text"
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '0.78rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                >
+                  {[5, 10, 15, 20, 30, 50].map(val => (
+                    <option key={val} value={val}>{val} cards</option>
+                  ))}
+                </select>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.35 }}>
-                Introduza novos termos e frases de suas ilhas na rotatividade de estudos espaçados (lote de 10 cards).
-              </p>
+
+              {/* Stars Filter dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filtro de Mastery (Estrelas)</span>
+                <select
+                  value={starsFilter}
+                  onChange={(e) => setStarsFilter(e.target.value)}
+                  className="input-text"
+                  style={{ width: '100%', padding: '6px 8px', fontSize: '0.78rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                >
+                  <option value="all">Todas as sentenças</option>
+                  <option value="starred">Qualquer Estrela (★+)</option>
+                  <option value="5">Apenas 5 Estrelas (★★★★★)</option>
+                  <option value="3">Apenas 3 Estrelas (★★★)</option>
+                  <option value="1">Apenas 1 Estrela (★)</option>
+                </select>
+              </div>
             </div>
-            
-            <button 
-              disabled={stats.newCount === 0} 
-              className="btn btn-secondary" 
-              style={{ padding: '8px 12px', fontSize: '0.75rem', width: '100%', borderRadius: '20px', borderColor: 'rgba(59,130,246,0.3)', color: '#3b82f6' }}
-            >
-              Aprender Novos Cards
-            </button>
+
+            {/* Shuffle Toggle Switch Row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.01)', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Shuffle size={16} style={{ color: 'var(--accent)' }} />
+                <div>
+                  <strong style={{ fontSize: '0.8rem', display: 'block' }}>Ordem Aleatória (Embaralhar)</strong>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Mistura a fila de cards a cada nova sessão</span>
+                </div>
+              </div>
+
+              {/* Minimalist toggle switch wrapper */}
+              <label style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={shuffleQueue}
+                  onChange={(e) => setShuffleQueue(e.target.checked)}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: shuffleQueue ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+                    transition: '.3s',
+                    borderRadius: '34px'
+                  }}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    content: '""',
+                    height: '16px', width: '16px',
+                    left: shuffleQueue ? '20px' : '4px',
+                    bottom: '3px',
+                    backgroundColor: 'white',
+                    transition: '.3s',
+                    borderRadius: '50%'
+                  }}
+                />
+              </label>
+            </div>
           </div>
-
-        </div>
-
-        {/* Option C: Review All (Secondary Action) */}
-        {stats.learnedCount > 0 && (
-          <button 
-            onClick={() => handleStartSession('all')}
-            className="btn btn-secondary" 
-            style={{ padding: '10px', fontSize: '0.8rem', borderRadius: '30px', marginTop: '8px', border: '1px dashed var(--border)' }}
-          >
-            Revisar Todos os Cards Ativos ({stats.learnedCount} na rotação)
-          </button>
         )}
       </div>
+
+      {/* Popover Algorithm Modal overlay */}
+      {showAlgorithmHelp && (
+        <div className="practice-modal-overlay" onClick={() => setShowAlgorithmHelp(false)}>
+          <div className="practice-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <HelpCircle size={18} style={{ color: 'var(--accent)' }} /> Algoritmos de Repetição
+              </h3>
+              <button onClick={() => setShowAlgorithmHelp(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', fontWeight: 'bold' }}>&times;</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+              <div>
+                <strong style={{ color: 'white', display: 'block', marginBottom: '4px' }}>📈 Fibonacci Spacing</strong>
+                Intervalos baseados na sequência de Fibonacci (1, 2, 3, 5, 8, 13 dias...). Em caso de erro, você retrocede apenas 2 níveis em vez de resetar, protegendo sua linha de aprendizado.
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                <strong style={{ color: 'white', display: 'block', marginBottom: '4px' }}>⚙️ SuperMemo SM2</strong>
+                Calcula os próximos intervalos multiplicando pelo Fator de Facilidade (Ease Factor). Respostas fáceis aumentam a facilidade, enquanto erros resetam o intervalo do card para 1 dia.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

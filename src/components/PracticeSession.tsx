@@ -26,6 +26,8 @@ export const PracticeSession: React.FC = () => {
     updatePhrase,
     reorderPhrases,
     deletePhrase,
+    phraseStars,
+    updatePhraseStars,
     streak,
     completedToday,
     dailyTarget
@@ -87,15 +89,7 @@ export const PracticeSession: React.FC = () => {
   const [showTargetOnly, setShowTargetOnly] = useState(false);
   const [showTranslationOnly, setShowTranslationOnly] = useState(false);
 
-  // Local card star mastery rating (1-5 stars)
-  const [phraseStars, setPhraseStars] = useState<Record<string, number>>(() => {
-    try {
-      const stored = localStorage.getItem('hl_phrase_stars');
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
+
 
   // Track total shadowing repetitions done in this active session
   const [sessionRepCount, setSessionRepCount] = useState(0);
@@ -570,17 +564,7 @@ export const PracticeSession: React.FC = () => {
   };
 
   const handleRateStars = async (phraseId: string, starCount: number) => {
-    const nextStars = { ...phraseStars, [phraseId]: starCount };
-    setPhraseStars(nextStars);
-    localStorage.setItem('hl_phrase_stars', JSON.stringify(nextStars));
-
-    // Map stars to SM2 difficulty category
-    // 5 stars = Fácil (easy), 3-4 = Médio (medium), 1-2 = Difícil (hard)
-    let difficulty: 'easy' | 'medium' | 'hard' = 'medium';
-    if (starCount === 5) difficulty = 'easy';
-    else if (starCount <= 2) difficulty = 'hard';
-
-    await submitPracticeResult(phraseId, difficulty);
+    await updatePhraseStars(phraseId, starCount);
   };
 
   // --- 9. Add Phrase Submit ---

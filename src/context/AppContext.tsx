@@ -97,6 +97,8 @@ interface AppContextType {
   toggleTheme: () => void;
   updatePhrase: (phraseId: string, updatedFields: Partial<Phrase>) => void;
   reorderPhrases: (categoryId: string, phraseId: string, newPositionOneIndexed: number) => void;
+  phraseStars: Record<string, number>;
+  updatePhraseStars: (phraseId: string, starCount: number) => Promise<void>;
   deletePhrase: (phraseId: string) => void;
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
@@ -961,6 +963,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const [phraseStars, setPhraseStarsState] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem('hl_phrase_stars');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const updatePhraseStars = async (phraseId: string, starCount: number) => {
+    const nextStars = { ...phraseStars, [phraseId]: starCount };
+    setPhraseStarsState(nextStars);
+    localStorage.setItem('hl_phrase_stars', JSON.stringify(nextStars));
+
+    let difficulty: 'easy' | 'medium' | 'hard' = 'medium';
+    if (starCount === 5) difficulty = 'easy';
+    else if (starCount <= 2) difficulty = 'hard';
+
+    await submitPracticeResult(phraseId, difficulty);
+  };
+
   const [deletedPhraseIds, setDeletedPhraseIds] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('hl_deleted_phrases');
@@ -1112,6 +1135,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleTheme,
         updatePhrase,
         reorderPhrases,
+        phraseStars,
+        updatePhraseStars,
         deletePhrase,
         customCategories,
         addCustomCategory,
