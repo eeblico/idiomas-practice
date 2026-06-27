@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { 
   Music, Plus, Trash2, ArrowLeft, CheckCircle, 
   HelpCircle, X, RotateCcw, Youtube, Languages, Eye, EyeOff, Info,
-  Play, Pause, Headphones, MessageSquare, Star, Edit2, ChevronRight, Settings, Repeat
+  Play, Pause, Headphones, MessageSquare, Star, Edit2, ChevronRight, Settings, Repeat, Layers
 } from 'lucide-react';
 
 interface Song {
@@ -239,6 +239,9 @@ export const MusicStudy: React.FC = () => {
   const [songSettingsOpen, setSongSettingsOpen] = useState(false);
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [studyTab, setStudyTab] = useState<'lyrics' | 'cloze' | 'reorder'>('lyrics');
+  const [flashcardMode, setFlashcardMode] = useState(false);
+  const [currentFlashcardIdx, setCurrentFlashcardIdx] = useState(0);
+  const [isFlashcardFlipped, setIsFlashcardFlipped] = useState(false);
 
   // Add song form states
   const [newTitle, setNewTitle] = useState('');
@@ -877,6 +880,7 @@ export const MusicStudy: React.FC = () => {
   const handleSelectSong = (song: Song) => {
     setActiveSong(song);
     setStudyTab('lyrics');
+    setFlashcardMode(false);
     initClozeGame(song);
     initScrambleGame(song, 0);
   };
@@ -884,6 +888,7 @@ export const MusicStudy: React.FC = () => {
   const handleBackToLibrary = () => {
     stopPlayer();
     setActiveSong(null);
+    setFlashcardMode(false);
     setClozeSubmitted(false);
     setReorderSubmitted(false);
   };
@@ -1260,7 +1265,7 @@ export const MusicStudy: React.FC = () => {
                   Letra (Sentenças)
                 </button>
                 <button
-                  onClick={() => { stopPlayer(); setStudyTab('cloze'); initClozeGame(activeSong); }}
+                  onClick={() => { stopPlayer(); setStudyTab('cloze'); initClozeGame(activeSong); setFlashcardMode(false); }}
                   className={`tab-btn ${studyTab === 'cloze' ? 'active' : ''}`}
                   style={{
                     flex: 1, padding: '14px 10px', background: 'none', border: 'none',
@@ -1271,7 +1276,7 @@ export const MusicStudy: React.FC = () => {
                   Jogo: Letra Oculta
                 </button>
                 <button
-                  onClick={() => { stopPlayer(); setStudyTab('reorder'); initScrambleGame(activeSong, 0); }}
+                  onClick={() => { stopPlayer(); setStudyTab('reorder'); initScrambleGame(activeSong, 0); setFlashcardMode(false); }}
                   className={`tab-btn ${studyTab === 'reorder' ? 'active' : ''}`}
                   style={{
                     flex: 1, padding: '14px 10px', background: 'none', border: 'none',
@@ -1413,6 +1418,22 @@ export const MusicStudy: React.FC = () => {
                           <MessageSquare size={14} />
                         </button>
 
+                        <button 
+                          className={`btn-icon ${flashcardMode ? 'active' : ''}`}
+                          style={{ width: '32px', height: '32px' }}
+                          onClick={() => {
+                            setFlashcardMode(prev => !prev);
+                            setCurrentFlashcardIdx(0);
+                            setIsFlashcardFlipped(false);
+                            if (isPlaying) {
+                              stopPlayer();
+                            }
+                          }}
+                          title="Praticar com Flashcards"
+                        >
+                          <Layers size={14} />
+                        </button>
+
                         <button
                           className="settings-btn"
                           style={{ padding: '4px 8px', fontSize: '0.7rem' }}
@@ -1427,235 +1448,413 @@ export const MusicStudy: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Cards Grid */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {cleanSongLines.map((line, idx) => {
-                        const lineKey = `${activeSong.id}-${line.originalIdx}`;
-                        const isCardPlaying = isPlaying && playingIndex === idx;
-                        const isCardFavorite = favorites.includes(lineKey);
-                        const isCardRevealed = revealedCards[lineKey] || false;
-                        const starsCount = phraseStars[lineKey] || 0;
-
-                        if (editingLineIdx === line.originalIdx) {
-                          return (
-                            <form 
-                              key={line.originalIdx}
-                              onSubmit={(e) => { e.preventDefault(); saveEditLine(); }}
-                              className="glass-card scale-in"
-                              style={{
-                                padding: '16px',
-                                border: '1px solid var(--accent)',
-                                borderRadius: 'var(--radius-md)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '10px'
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <strong style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>Editar Frase da Letra</strong>
-                                <button 
-                                  type="button" 
-                                  className="settings-btn" 
-                                  style={{ border: 'none', padding: '2px 8px', fontSize: '0.7rem' }} 
-                                  onClick={() => setEditingLineIdx(null)}
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem' }}>Texto Original</label>
-                                <input 
-                                  type="text"
-                                  className="input-text"
-                                  style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
-                                  value={editLineText}
-                                  onChange={(e) => setEditLineText(e.target.value)}
-                                  required
-                                />
-                              </div>
-
-                              <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem' }}>Tradução em Português</label>
-                                <input 
-                                  type="text"
-                                  className="input-text"
-                                  style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
-                                  value={editLineTranslation}
-                                  onChange={(e) => setEditLineTranslation(e.target.value)}
-                                  required
-                                />
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>
-                                  Salvar Alterações
-                                </button>
-                                <button 
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => deleteLine(line.originalIdx)}
-                                  style={{
-                                    padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer',
-                                    background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)'
-                                  }}
-                                >
-                                  Excluir
-                                </button>
-                              </div>
-                            </form>
-                          );
-                        }
-
-                        return (
-                          <div 
-                            key={line.originalIdx}
-                            id={`song-card-${activeSong.id}-${line.originalIdx}`}
-                            className={`phrase-list-card ${isCardPlaying ? 'playing' : ''}`}
-                            onClick={() => handleCardClick(line.lyric, idx)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <div className="phrase-card-content-layout">
-                              <div className="phrase-card-meta-group">
-                                <span className="phrase-card-number">
-                                  #{idx + 1}
-                                </span>
-
-                                {/* Favorite star */}
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); toggleFavorite(lineKey); }}
-                                  style={{ background: 'none', border: 'none', color: isCardFavorite ? '#eab308' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
-                                >
-                                  <Star size={13} fill={isCardFavorite ? '#eab308' : 'none'} />
-                                </button>
-
-                                {/* Edit Line button */}
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); startEditLine(line.originalIdx, line.lyric, line.translation); }}
-                                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
-                                  title="Editar linha"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                              </div>
-
-                              {/* Play Individual button */}
+                    {/* Cards Grid or Flashcards mode */}
+                    {flashcardMode ? (
+                      <div className="flashcard-mode-container" style={{ width: '100%' }}>
+                        {cleanSongLines.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            Nenhuma frase encontrada para praticar flashcards.
+                          </div>
+                        ) : currentFlashcardIdx >= cleanSongLines.length ? (
+                          <div className="glass-card scale-in" style={{ padding: '30px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '3rem' }}>🎉</span>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Música Revisada!</h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '300px' }}>
+                              Você revisou todas as {cleanSongLines.length} frases desta música com sucesso.
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                               <button 
-                                className="phrase-card-play-btn"
-                                onClick={(e) => { e.stopPropagation(); handleCardClick(line.lyric, idx); }}
-                                style={{ background: 'none', border: 'none', color: isCardPlaying ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
+                                className="btn btn-primary" 
+                                onClick={() => {
+                                  setCurrentFlashcardIdx(0);
+                                  setIsFlashcardFlipped(false);
+                                }}
+                                style={{ padding: '10px 20px' }}
                               >
-                                <Play size={15} fill={isCardPlaying ? 'currentColor' : 'none'} />
+                                Revisar Novamente
                               </button>
-
-                              {/* Card Text Content */}
-                              <div className="phrase-card-text-block">
-                                
-                                {showTargetOnly && (
-                                  <>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                      {line.lyric}
-                                    </span>
-                                    {isCardRevealed ? (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                          {line.translation}
-                                        </span>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
-                                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                                        >
-                                          <EyeOff size={12} />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: true })); }}
-                                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0, textAlign: 'left' }}
-                                      >
-                                        Ver tradução
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-
-                                {showTranslationOnly && (
-                                  <>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                      {line.translation}
-                                    </span>
-                                    {isCardRevealed ? (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>
-                                          {line.lyric}
-                                        </span>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
-                                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                                        >
-                                          <EyeOff size={12} />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: true })); }}
-                                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0, textAlign: 'left' }}
-                                      >
-                                        Ver original
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-
-                                {!showTargetOnly && !showTranslationOnly && (
-                                  <>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                      {line.lyric}
-                                    </span>
-                                    {isCardRevealed ? (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                                          {line.translation}
-                                        </span>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
-                                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
-                                        >
-                                          <EyeOff size={12} />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: true })); }}
-                                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline', padding: 0, textAlign: 'left' }}
-                                      >
-                                        Toque para revelar
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-
-                              </div>
-
-                              {/* 5-Star Ratings */}
-                              <div className="phrase-stars-container">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                  <Star 
-                                    key={star}
-                                    size={13}
-                                    className={`phrase-star ${star <= starsCount ? 'active' : ''}`}
-                                    fill={star <= starsCount ? 'currentColor' : 'none'}
-                                    onClick={(e) => { e.stopPropagation(); handleRateStars(lineKey, star); }}
-                                  />
-                                ))}
-                              </div>
-
+                              <button 
+                                className="btn" 
+                                onClick={() => setFlashcardMode(false)}
+                                style={{ padding: '10px 20px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}
+                              >
+                                Voltar para Lista
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        ) : (
+                          (() => {
+                            const line = cleanSongLines[currentFlashcardIdx];
+                            const lineKey = `${activeSong.id}-${line.originalIdx}`;
 
+                            const handleFlashcardRate = (rating: 'easy' | 'medium' | 'hard') => {
+                              const ratingStars = {
+                                easy: 5,
+                                medium: 3,
+                                hard: 1
+                              };
+                              handleRateStars(lineKey, ratingStars[rating]);
+                              setIsFlashcardFlipped(false);
+                              setTimeout(() => {
+                                setCurrentFlashcardIdx(prev => prev + 1);
+                              }, 200);
+                            };
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                                    Card {currentFlashcardIdx + 1} de {cleanSongLines.length}
+                                  </span>
+                                  <button 
+                                    onClick={() => setFlashcardMode(false)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    title="Sair do modo flashcard"
+                                  >
+                                    <X size={18} />
+                                  </button>
+                                </div>
+
+                                <div 
+                                  className={`flashcard-card ${isFlashcardFlipped ? 'flipped' : ''}`}
+                                  onClick={() => setIsFlashcardFlipped(prev => !prev)}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  <div className="flashcard-card-inner">
+                                    <div className="flashcard-card-front glass-card">
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '16px', display: 'block' }}>
+                                        Frase Original
+                                      </span>
+                                      
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                                        <span className="phrase-text-display size-md" style={{ fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4, wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
+                                          {line.lyric}
+                                        </span>
+                                        
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); speakLine(line.lyric, activeSong.language_id || targetLanguage); }}
+                                          className="btn-icon"
+                                          style={{ 
+                                            background: 'var(--accent-glow)', 
+                                            border: 'none', 
+                                            color: 'var(--accent)', 
+                                            cursor: 'pointer', 
+                                            borderRadius: '50%',
+                                            width: '42px',
+                                            height: '42px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            marginTop: '10px',
+                                            boxShadow: 'var(--shadow-sm)'
+                                          }}
+                                          title="Ouvir pronúncia"
+                                        >
+                                          <Play size={20} style={{ marginLeft: '3px' }} />
+                                        </button>
+                                      </div>
+
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '20px' }}>
+                                        Toque no card para revelar a tradução
+                                      </div>
+                                    </div>
+
+                                    <div className="flashcard-card-back glass-card">
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '16px', display: 'block' }}>
+                                        Tradução
+                                      </span>
+
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                                        <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, wordBreak: 'keep-all', overflowWrap: 'break-word', whiteSpace: 'normal' }}>
+                                          {line.translation}
+                                        </span>
+                                      </div>
+
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '20px' }}>
+                                        Toque para voltar à frase original
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '8px' }}>
+                                  {isFlashcardFlipped ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleFlashcardRate('hard'); }}
+                                        className="btn"
+                                        style={{ flex: 1, padding: '12px', background: 'var(--danger-glow)', border: '1px solid var(--danger)', color: 'var(--danger)', fontWeight: 700 }}
+                                      >
+                                        🔴 Difícil
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleFlashcardRate('medium'); }}
+                                        className="btn"
+                                        style={{ flex: 1, padding: '12px', background: 'var(--warning-glow)', border: '1px solid var(--warning)', color: 'var(--warning)', fontWeight: 700 }}
+                                      >
+                                        🟡 Médio
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleFlashcardRate('easy'); }}
+                                        className="btn"
+                                        style={{ flex: 1, padding: '12px', background: 'var(--success-glow)', border: '1px solid var(--success)', color: 'var(--success)', fontWeight: 700 }}
+                                      >
+                                        🟢 Fácil
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsFlashcardFlipped(true)}
+                                      className="btn btn-primary"
+                                      style={{ width: '100%', padding: '12px', fontWeight: 700 }}
+                                    >
+                                      Mostrar Tradução
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCurrentFlashcardIdx(prev => prev - 1);
+                                      setIsFlashcardFlipped(false);
+                                    }}
+                                    disabled={currentFlashcardIdx === 0}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: currentFlashcardIdx === 0 ? 0.4 : 1 }}
+                                  >
+                                    Anterior
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCurrentFlashcardIdx(prev => prev + 1);
+                                      setIsFlashcardFlipped(false);
+                                    }}
+                                    className="btn btn-secondary"
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                  >
+                                    Pular
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {cleanSongLines.map((line, idx) => {
+                          const lineKey = `${activeSong.id}-${line.originalIdx}`;
+                          const isCardPlaying = isPlaying && playingIndex === idx;
+                          const isCardFavorite = favorites.includes(lineKey);
+                          const isCardRevealed = revealedCards[lineKey] || false;
+                          const starsCount = phraseStars[lineKey] || 0;
+
+                          if (editingLineIdx === line.originalIdx) {
+                            return (
+                              <form 
+                                key={line.originalIdx}
+                                onSubmit={(e) => { e.preventDefault(); saveEditLine(); }}
+                                className="glass-card scale-in"
+                                style={{
+                                  padding: '16px',
+                                  border: '1px solid var(--accent)',
+                                  borderRadius: 'var(--radius-md)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '10px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <strong style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>Editar Frase da Letra</strong>
+                                  <button 
+                                    type="button" 
+                                    className="settings-btn" 
+                                    style={{ border: 'none', padding: '2px 8px', fontSize: '0.7rem' }} 
+                                    onClick={() => setEditingLineIdx(null)}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '0.7rem' }}>Texto Original</label>
+                                  <input 
+                                    type="text"
+                                    className="input-text"
+                                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
+                                    value={editLineText}
+                                    onChange={(e) => setEditLineText(e.target.value)}
+                                    required
+                                  />
+                                </div>
+
+                                <div className="form-group">
+                                  <label className="form-label" style={{ fontSize: '0.7rem' }}>Tradução em Português</label>
+                                  <input 
+                                    type="text"
+                                    className="input-text"
+                                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
+                                    value={editLineTranslation}
+                                    onChange={(e) => setEditLineTranslation(e.target.value)}
+                                    required
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                  <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>
+                                    Salvar Alterações
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    className="btn"
+                                    onClick={() => deleteLine(line.originalIdx)}
+                                    style={{
+                                      padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer',
+                                      background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)'
+                                    }}
+                                  >
+                                    Excluir Verso
+                                  </button>
+                                </div>
+                              </form>
+                            );
+                          }
+
+                          return (
+                            <div 
+                              key={line.originalIdx}
+                              id={`song-card-${activeSong.id}-${line.originalIdx}`}
+                              className={`phrase-list-card ${isCardPlaying ? 'playing' : ''}`}
+                              onClick={() => handleCardClick(line.lyric, idx)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="phrase-card-content-layout">
+                                <div className="phrase-card-meta-group">
+                                  <span className="phrase-card-number">
+                                    #{idx + 1}
+                                  </span>
+
+                                  {/* Favorite star */}
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleFavorite(lineKey); }}
+                                    style={{ background: 'none', border: 'none', color: isCardFavorite ? '#eab308' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
+                                  >
+                                    <Star size={13} fill={isCardFavorite ? '#eab308' : 'none'} />
+                                  </button>
+
+                                  {/* Edit Line button */}
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); startEditLine(line.originalIdx, line.lyric, line.translation); }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
+                                    title="Editar linha"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                </div>
+
+                                {/* Play Individual button */}
+                                <button 
+                                  className="phrase-card-play-btn"
+                                  onClick={(e) => { e.stopPropagation(); handleCardClick(line.lyric, idx); }}
+                                  style={{ background: 'none', border: 'none', color: isCardPlaying ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '2px' }}
+                                >
+                                  <Play size={15} fill={isCardPlaying ? 'currentColor' : 'none'} />
+                                </button>
+
+                                {/* Card Text Content */}
+                                <div className="phrase-card-text-block">
+                                  
+                                  {showTargetOnly && (
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {line.lyric}
+                                    </span>
+                                  )}
+
+                                  {showTranslationOnly && (
+                                    <>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                        {line.translation}
+                                      </span>
+                                      {isCardRevealed ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--accent)' }}>
+                                            {line.lyric}
+                                          </span>
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                          >
+                                            <EyeOff size={12} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: true })); }}
+                                          style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0, textAlign: 'left' }}
+                                        >
+                                          Ver original
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {!showTargetOnly && !showTranslationOnly && (
+                                    <>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                        {line.lyric}
+                                      </span>
+                                      {isCardRevealed ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                            {line.translation}
+                                          </span>
+                                          <button 
+                                            onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: false })); }}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                          >
+                                            <EyeOff size={12} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); setRevealedCards(prev => ({ ...prev, [lineKey]: true })); }}
+                                          style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline', padding: 0, textAlign: 'left' }}
+                                        >
+                                          Toque para revelar
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+
+                                </div>
+
+                                {/* 5-Star Ratings */}
+                                <div className="phrase-stars-container">
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                    <Star 
+                                      key={star}
+                                      size={13}
+                                      className={`phrase-star ${star <= starsCount ? 'active' : ''}`}
+                                      fill={star <= starsCount ? 'currentColor' : 'none'}
+                                      onClick={(e) => { e.stopPropagation(); handleRateStars(lineKey, star); }}
+                                    />
+                                  ))}
+                                </div>
+
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
