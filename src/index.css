@@ -1695,21 +1695,37 @@ button, input, textarea, select {
 
 /* Player banner responsive scaling for narrow viewports */
 @media (max-width: 576px) {
+  .autoplay-text-container {
+    display: none !important;
+  }
   .autoplay-banner {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-    padding: 12px !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
   }
   .autoplay-controls-group {
-    justify-content: space-between !important;
-    width: 100% !important;
+    width: auto !important;
+    justify-content: flex-start !important;
+    gap: 4px !important;
   }
   .autoplay-controls-group:last-child {
-    justify-content: center !important;
-    gap: 8px !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    padding-top: 8px !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    border-top: none !important;
+    padding-top: 0 !important;
+    width: auto !important;
+  }
+  .autoplay-controls-group button {
+    padding: 4px 8px !important;
+    height: 32px !important;
+    width: auto !important;
+    font-size: 0.72rem !important;
+  }
+  .autoplay-controls-group .btn-icon {
+    width: 32px !important;
+    height: 32px !important;
   }
 }
 

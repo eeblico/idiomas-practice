@@ -1152,7 +1152,7 @@ export const PracticeSession: React.FC = () => {
                 {isPlaying ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" style={{ marginLeft: '2px' }} />}
               </button>
 
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="autoplay-text-container" style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
                   {isPlaying ? 'Autoplay rodando...' : 'Iniciar Autoplay'}
                 </span>
