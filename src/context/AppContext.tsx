@@ -1141,7 +1141,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const overridden = nonDeleted.map(p => {
       const override = phraseOverrides[p.id];
-      return override ? { ...p, ...override } : p;
+      const merged = override ? { ...p, ...override } : p;
+      if (merged.explanation && merged.explanation.startsWith('Frase da coleção:')) {
+        return { ...merged, explanation: '' };
+      }
+      return merged;
     });
 
     const langPhrases = overridden.filter(p => p.language_id === targetLanguage);
