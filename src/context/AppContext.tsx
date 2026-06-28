@@ -1142,15 +1142,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const overridden = nonDeleted.map(p => {
       const override = phraseOverrides[p.id];
       const merged = override ? { ...p, ...override } : p;
-      if (merged.explanation) {
-        const expLower = merged.explanation.toLowerCase().trim();
-        if (
-          expLower.includes('coleção') || 
-          expLower.includes('colecao') || 
-          expLower.includes('collection') || 
-          expLower.includes('colección') || 
-          expLower.includes('coleccion')
-        ) {
+      
+      const isDefaultPhrase = phrases.some(dp => dp.id === p.id);
+      if (isDefaultPhrase) {
+        const userHasCustomExplanation = override && override.explanation !== undefined;
+        if (!userHasCustomExplanation) {
           return { ...merged, explanation: '' };
         }
       }
