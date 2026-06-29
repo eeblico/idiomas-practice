@@ -122,7 +122,7 @@ export const ReviewSession: React.FC = () => {
   const [plannerViewMode, setPlannerViewMode] = useState<'3days' | '1week' | '1month' | '1year'>('1week');
   const [plannerFontSize, setPlannerFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [showCountdowns, setShowCountdowns] = useState<boolean>(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [showSidebarWeeks, setShowSidebarWeeks] = useState<boolean>(false);
   
   // Custom countdowns
   const [customCountdowns, setCustomCountdowns] = useState<{ id: string; title: string; targetDate: string }[]>(() => {
@@ -370,19 +370,16 @@ export const ReviewSession: React.FC = () => {
     };
   }, [plannerViewMode, activeDates, weekOffset, telemetryStateTrigger]);
 
-  // Countdown timers helper functions
+  // Countdown timers helper functions (days-only format)
   const getYearCountdown = (): string => {
     const now = new Date();
     const year = now.getFullYear();
     const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
     const diffMs = endOfYear.getTime() - now.getTime();
-    if (diffMs <= 0) return '0d 0h 0m 0s';
+    if (diffMs <= 0) return '0 dias';
     
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
-    return `${days}d ${hours}h ${mins}m ${secs}s`;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `${days} ${days === 1 ? 'dia' : 'dias'}`;
   };
 
   const getQuarterCountdown = (): string => {
@@ -397,13 +394,10 @@ export const ReviewSession: React.FC = () => {
     
     const endOfQuarter = new Date(year, endMonth + 1, 0, 23, 59, 59, 999);
     const diffMs = endOfQuarter.getTime() - now.getTime();
-    if (diffMs <= 0) return '0d 0h 0m 0s';
+    if (diffMs <= 0) return '0 dias';
     
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
-    return `${days}d ${hours}h ${mins}m ${secs}s`;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `${days} ${days === 1 ? 'dia' : 'dias'}`;
   };
 
   const getCustomCountdown = (targetDateStr: string): string => {
@@ -412,11 +406,8 @@ export const ReviewSession: React.FC = () => {
     const diffMs = target.getTime() - now.getTime();
     if (diffMs <= 0) return 'Concluído!';
     
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
-    return `${days}d ${hours}h ${mins}m ${secs}s`;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `${days} ${days === 1 ? 'dia' : 'dias'}`;
   };
 
   // Dashboard calculations
@@ -2010,287 +2001,174 @@ export const ReviewSession: React.FC = () => {
         {/* TAB 2: WEEKLY PLANNER VIEW              */}
         {/* ======================================= */}
         {activeSubTab === 'planner' && (
-          <div className={`fade-in planner-root font-${plannerFontSize}`} style={{ display: 'flex', gap: '16px', minHeight: '600px', width: '100%', position: 'relative' }}>
+          <div className={`fade-in planner-root font-${plannerFontSize}`} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', minHeight: '600px' }}>
             
-            {/* 1. LEFT SIDEBAR: SAVED WEEKS */}
-            <div 
-              className="glass-card planner-sidebar" 
-              style={{ 
-                width: sidebarCollapsed ? '48px' : '220px', 
-                flexShrink: 0, 
-                transition: 'all 0.3s ease', 
-                overflow: 'hidden', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '16px', 
-                padding: '12px',
-                borderRight: '1px solid var(--border)'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'space-between', alignItems: 'center' }}>
-                {!sidebarCollapsed && <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'white' }}>📅 Cronologia</span>}
-                <button 
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px' }}
-                  title={sidebarCollapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
+            {/* Header & Advanced Settings Toolbar */}
+            <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                    📅 Planejador de Estudos Inteligente
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Organize suas revisões diárias, configure cronômetros e acompanhe sua produtividade
+                  </span>
+                </div>
+                
+                {/* Week/Month pagination */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    onClick={() => setWeekOffset(prev => prev - 1)}
+                    className="btn-icon"
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
+                  >
+                    ◀ Anterior
+                  </button>
+                  <button 
+                    onClick={() => setWeekOffset(0)}
+                    className="btn-icon"
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', fontWeight: 700 }}
+                  >
+                    Hoje / Atual
+                  </button>
+                  <button 
+                    onClick={() => setWeekOffset(prev => prev + 1)}
+                    className="btn-icon"
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
+                  >
+                    Próxima ▶
+                  </button>
+                </div>
+              </div>
+
+              {/* Advanced Controls Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                
+                {/* View mode switcher */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Visualização:</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {([
+                      { id: '3days', label: '3 Dias' },
+                      { id: '1week', label: 'Semana' },
+                      { id: '1month', label: 'Mês' },
+                      { id: '1year', label: 'Ano' }
+                    ] as const).map(mode => (
+                      <button
+                        key={mode.id}
+                        onClick={() => {
+                          setPlannerViewMode(mode.id);
+                          setWeekOffset(0);
+                        }}
+                        style={{
+                          background: plannerViewMode === mode.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--border)',
+                          color: plannerViewMode === mode.id ? 'white' : 'var(--text-secondary)',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Font Size Selector */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tamanho Fonte:</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {([
+                      { id: 'normal', label: 'A' },
+                      { id: 'large', label: 'A+' },
+                      { id: 'xlarge', label: 'A++' }
+                    ] as const).map(sz => (
+                      <button
+                        key={sz.id}
+                        onClick={() => setPlannerFontSize(sz.id)}
+                        style={{
+                          background: plannerFontSize === sz.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--border)',
+                          color: plannerFontSize === sz.id ? 'white' : 'var(--text-secondary)',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          minWidth: '28px'
+                        }}
+                      >
+                        {sz.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Countdown and Chronology toggles */}
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox"
+                      checked={showCountdowns}
+                      onChange={(e) => setShowCountdowns(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Mostrar Cronômetros (Sidebar)
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox"
+                      checked={showSidebarWeeks}
+                      onChange={(e) => setShowSidebarWeeks(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Ver Cronologia (Sidebar)
+                  </label>
+                </div>
+
+              </div>
+
+              {/* Add Custom Countdown Form inside Advanced Bar */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', width: '100%' }}>
+                  ➕ Adicionar Cronômetro Regressivo de Meta
+                </span>
+                <input
+                  type="text"
+                  placeholder="Título da meta (ex: Exame de Proficiência)"
+                  className="input-text"
+                  value={newCountdownTitle}
+                  onChange={(e) => setNewCountdownTitle(e.target.value)}
+                  style={{ flex: 2, minWidth: '180px', fontSize: '0.75rem', height: '28px' }}
+                />
+                <input
+                  type="date"
+                  className="input-text"
+                  value={newCountdownDate}
+                  onChange={(e) => setNewCountdownDate(e.target.value)}
+                  style={{ flex: 1, minWidth: '120px', fontSize: '0.75rem', height: '28px' }}
+                />
+                <button
+                  onClick={() => {
+                    if (!newCountdownTitle.trim() || !newCountdownDate) return;
+                    const nextCd = [...customCountdowns, { id: Math.random().toString(36).slice(2, 9), title: newCountdownTitle.trim(), targetDate: newCountdownDate }];
+                    setCustomCountdowns(nextCd);
+                    localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                    setNewCountdownTitle('');
+                    setNewCountdownDate('');
+                  }}
+                  className="btn btn-primary"
+                  style={{ padding: '0 12px', fontSize: '0.75rem', height: '28px', borderRadius: '4px' }}
                 >
-                  {sidebarCollapsed ? '▶' : '◀'}
+                  Adicionar
                 </button>
               </div>
 
-              {!sidebarCollapsed && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto' }}>
-                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Semanas de Estudo</span>
-                  {[-4, -3, -2, -1, 0, 1, 2].map((offsetVal) => {
-                    const today = new Date();
-                    const day = today.getDay();
-                    const startDiff = today.getDate() - day + (day === 0 ? -6 : 1) + (offsetVal * 7);
-                    const weekStart = new Date(today.setDate(startDiff));
-                    const weekEnd = new Date(weekStart);
-                    weekEnd.setDate(weekStart.getDate() + 6);
-                    
-                    const isSelected = weekOffset === offsetVal && plannerViewMode === '1week';
-                    const isCurrent = offsetVal === 0;
-
-                    const labelStart = weekStart.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-                    const labelEnd = weekEnd.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-
-                    return (
-                      <button
-                        key={offsetVal}
-                        onClick={() => {
-                          setWeekOffset(offsetVal);
-                          setPlannerViewMode('1week');
-                        }}
-                        style={{
-                          background: isSelected ? 'var(--accent)' : 'rgba(255, 255, 255, 0.02)',
-                          border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
-                          color: isSelected ? 'white' : 'var(--text-secondary)',
-                          borderRadius: '6px',
-                          padding: '8px 10px',
-                          fontSize: '0.72rem',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <span style={{ fontWeight: 700 }}>
-                          {labelStart} - {labelEnd}
-                        </span>
-                        <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>
-                          {isCurrent ? '⭐ Semana Atual' : `Offset: ${offsetVal}`}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
-
-            {/* 2. MAIN AREA */}
-            <div className="planner-main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowX: 'hidden' }}>
-              
-              {/* Header & Advanced Settings Toolbar */}
-              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                      📅 Planejador de Estudos Inteligente
-                    </h3>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      Organize suas revisões diárias, configure cronômetros e acompanhe sua produtividade
-                    </span>
-                  </div>
-                  
-                  {/* Week/Month pagination */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button 
-                      onClick={() => setWeekOffset(prev => prev - 1)}
-                      className="btn-icon"
-                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
-                    >
-                      ◀ Anterior
-                    </button>
-                    <button 
-                      onClick={() => setWeekOffset(0)}
-                      className="btn-icon"
-                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', fontWeight: 700 }}
-                    >
-                      Hoje / Atual
-                    </button>
-                    <button 
-                      onClick={() => setWeekOffset(prev => prev + 1)}
-                      className="btn-icon"
-                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
-                    >
-                      Próxima ▶
-                    </button>
-                  </div>
-                </div>
-
-                {/* Advanced Controls Bar */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                  
-                  {/* View mode switcher */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Visualização:</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {([
-                        { id: '3days', label: '3 Dias' },
-                        { id: '1week', label: 'Semana' },
-                        { id: '1month', label: 'Mês' },
-                        { id: '1year', label: 'Ano' }
-                      ] as const).map(mode => (
-                        <button
-                          key={mode.id}
-                          onClick={() => {
-                            setPlannerViewMode(mode.id);
-                            setWeekOffset(0);
-                          }}
-                          style={{
-                            background: plannerViewMode === mode.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
-                            border: '1px solid var(--border)',
-                            color: plannerViewMode === mode.id ? 'white' : 'var(--text-secondary)',
-                            padding: '4px 10px',
-                            borderRadius: '20px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Font Size Selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tamanho Fonte:</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {([
-                        { id: 'normal', label: 'A' },
-                        { id: 'large', label: 'A+' },
-                        { id: 'xlarge', label: 'A++' }
-                      ] as const).map(sz => (
-                        <button
-                          key={sz.id}
-                          onClick={() => setPlannerFontSize(sz.id)}
-                          style={{
-                            background: plannerFontSize === sz.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
-                            border: '1px solid var(--border)',
-                            color: plannerFontSize === sz.id ? 'white' : 'var(--text-secondary)',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            minWidth: '28px'
-                          }}
-                        >
-                          {sz.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Countdown Visibility toggle */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox"
-                        checked={showCountdowns}
-                        onChange={(e) => setShowCountdowns(e.target.checked)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      Mostrar Cronômetros
-                    </label>
-                  </div>
-
-                </div>
-
-                {/* Add Custom Countdown Form inside Advanced Bar */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', width: '100%' }}>
-                    ➕ Adicionar Cronômetro Regressivo de Meta
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Título da meta (ex: Exame de Proficiência)"
-                    className="input-text"
-                    value={newCountdownTitle}
-                    onChange={(e) => setNewCountdownTitle(e.target.value)}
-                    style={{ flex: 2, minWidth: '180px', fontSize: '0.75rem', height: '28px' }}
-                  />
-                  <input
-                    type="date"
-                    className="input-text"
-                    value={newCountdownDate}
-                    onChange={(e) => setNewCountdownDate(e.target.value)}
-                    style={{ flex: 1, minWidth: '120px', fontSize: '0.75rem', height: '28px' }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (!newCountdownTitle.trim() || !newCountdownDate) return;
-                      const nextCd = [...customCountdowns, { id: Math.random().toString(36).slice(2, 9), title: newCountdownTitle.trim(), targetDate: newCountdownDate }];
-                      setCustomCountdowns(nextCd);
-                      localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
-                      setNewCountdownTitle('');
-                      setNewCountdownDate('');
-                    }}
-                    className="btn btn-primary"
-                    style={{ padding: '0 12px', fontSize: '0.75rem', height: '28px', borderRadius: '4px' }}
-                  >
-                    Adicionar
-                  </button>
-                </div>
-
-              </div>
-
-              {/* 3. COUNTDOWN TIMERS BLOCK */}
-              {showCountdowns && (
-                <div className="countdown-timers-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <div className="glass-card" style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)' }}>
-                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Contagem Regressiva do Ano</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getYearCountdown()}</span>
-                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Para o final de {new Date().getFullYear()}</span>
-                  </div>
-
-                  <div className="glass-card" style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid #eab308' }}>
-                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Contagem do Trimestre</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getQuarterCountdown()}</span>
-                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Foco no trimestre ativo</span>
-                  </div>
-
-                  {customCountdowns.map(cd => (
-                    <div 
-                      key={cd.id} 
-                      className="glass-card" 
-                      style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--success)' }}
-                    >
-                      <button
-                        onClick={() => {
-                          const nextCd = customCountdowns.filter(c => c.id !== cd.id);
-                          setCustomCountdowns(nextCd);
-                          localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
-                        }}
-                        style={{ position: 'absolute', right: '8px', top: '8px', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer' }}
-                        title="Remover cronômetro"
-                      >
-                        &times;
-                      </button>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', paddingRight: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        🎯 {cd.title}
-                      </span>
-                      <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getCustomCountdown(cd.targetDate)}</span>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Meta: {new Date(cd.targetDate).toLocaleDateString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               {/* 4. SUMMARY STATISTICS DASHBOARD */}
               {plannerViewMode !== '1year' && (
@@ -2788,8 +2666,6 @@ export const ReviewSession: React.FC = () => {
               )}
 
             </div>
-
-          </div>
         )}
 
       </div>
@@ -2804,8 +2680,131 @@ export const ReviewSession: React.FC = () => {
             <span style={{ fontSize: '0.8rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <BarChart2 size={15} style={{ color: 'var(--accent)' }} /> Insights de Aprendizado
             </span>
-            <button onClick={() => setShowInsights(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.9rem' }}>&times;</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {activeSubTab === 'planner' && (
+                <button
+                  onClick={() => setShowSidebarWeeks(!showSidebarWeeks)}
+                  style={{
+                    background: showSidebarWeeks ? 'rgba(255,255,255,0.08)' : 'none',
+                    border: 'none',
+                    color: showSidebarWeeks ? 'var(--accent)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Alternar histórico de semanas"
+                >
+                  📅
+                </button>
+              )}
+              <button onClick={() => setShowInsights(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.9rem' }}>&times;</button>
+            </div>
           </div>
+
+          {/* ======================================= */}
+          {/* PLANNER ONLY: WEEKS CHRONOLOGY DRAWER  */}
+          {/* ======================================= */}
+          {activeSubTab === 'planner' && showSidebarWeeks && (
+            <div className="fade-in" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                📅 Cronologia de Semanas
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                {[-4, -3, -2, -1, 0, 1, 2].map((offsetVal) => {
+                  const today = new Date();
+                  const day = today.getDay();
+                  const startDiff = today.getDate() - day + (day === 0 ? -6 : 1) + (offsetVal * 7);
+                  const weekStart = new Date(today.setDate(startDiff));
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekStart.getDate() + 6);
+                  
+                  const isSelected = weekOffset === offsetVal && plannerViewMode === '1week';
+                  const isCurrent = offsetVal === 0;
+
+                  const labelStart = weekStart.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+                  const labelEnd = weekEnd.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+
+                  return (
+                    <button
+                      key={offsetVal}
+                      onClick={() => {
+                        setWeekOffset(offsetVal);
+                        setPlannerViewMode('1week');
+                      }}
+                      style={{
+                        background: isSelected ? 'var(--accent)' : 'rgba(255, 255, 255, 0.02)',
+                        border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        color: isSelected ? 'white' : 'var(--text-secondary)',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        fontSize: '0.7rem',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <span style={{ fontWeight: 700 }}>
+                        {labelStart} - {labelEnd}
+                      </span>
+                      <span style={{ fontSize: '0.58rem', opacity: 0.8 }}>
+                        {isCurrent ? '⭐ Semana Atual' : `Offset: ${offsetVal}`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ======================================= */}
+          {/* PLANNER ONLY: COUNTDOWN TIMERS          */}
+          {/* ======================================= */}
+          {activeSubTab === 'planner' && showCountdowns && (
+            <div className="fade-in" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ⏱️ Contagem Regressiva (Dias)
+              </span>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Fim do Ano:</span>
+                  <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getYearCountdown()}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Fim do Trimestre:</span>
+                  <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getQuarterCountdown()}</span>
+                </div>
+
+                {customCountdowns.map(cd => (
+                  <div key={cd.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px', position: 'relative' }}>
+                    <span style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100px' }} title={cd.title}>{cd.title}:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getCustomCountdown(cd.targetDate)}</span>
+                      <button
+                        onClick={() => {
+                          const nextCd = customCountdowns.filter(c => c.id !== cd.id);
+                          setCustomCountdowns(nextCd);
+                          localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                        }}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}
+                        title="Remover"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Average response time widget */}
           <div>
