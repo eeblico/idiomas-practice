@@ -118,6 +118,45 @@ export const ReviewSession: React.FC = () => {
   });
   const [taskInputs, setTaskInputs] = useState<Record<string, string>>({});
 
+  // Super Planner advanced settings states
+  const [plannerViewMode, setPlannerViewMode] = useState<'3days' | '1week' | '1month' | '1year'>('1week');
+  const [plannerFontSize, setPlannerFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [showCountdowns, setShowCountdowns] = useState<boolean>(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  
+  // Custom countdowns
+  const [customCountdowns, setCustomCountdowns] = useState<{ id: string; title: string; targetDate: string }[]>(() => {
+    try {
+      const stored = localStorage.getItem('hl_custom_countdowns');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [newCountdownTitle, setNewCountdownTitle] = useState('');
+  const [newCountdownDate, setNewCountdownDate] = useState('');
+
+  // Kanban task cards
+  const [kanbanCards, setKanbanCards] = useState<{ id: string; title: string; desc: string; col: 'todo' | 'progress' | 'done' }[]>(() => {
+    try {
+      const stored = localStorage.getItem('hl_planner_kanban');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [newKanbanTitle, setNewKanbanTitle] = useState<Record<string, string>>({});
+  const [newKanbanDesc, setNewKanbanDesc] = useState<Record<string, string>>({});
+
+  // Countdown timer ticker effect
+  const [tickerTime, setTickerTime] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTickerTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Study Modes / Games selection
   const [reviewMode, setReviewMode] = useState<'flashcard' | 'cloze' | 'scramble' | 'listening' | 'writing'>('flashcard');
 
@@ -192,22 +231,49 @@ export const ReviewSession: React.FC = () => {
     return `${y}-${m}-${d}`;
   };
 
-  // Get the 7 dates of the week based on weekOffset
-  const weekDates = useMemo(() => {
+  // Get active dates list based on plannerViewMode and weekOffset
+  const activeDates = useMemo(() => {
     const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1) + (weekOffset * 7);
-    const monday = new Date(today.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
+    if (plannerViewMode === '3days') {
+      const center = new Date(today);
+      center.setDate(today.getDate() + weekOffset);
+      center.setHours(0, 0, 0, 0);
+      
+      const dates = [];
+      for (let i = -1; i <= 1; i++) {
+        const d = new Date(center);
+        d.setDate(center.getDate() + i);
+        dates.push(d);
+      }
+      return dates;
+    } else if (plannerViewMode === '1week') {
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1) + (weekOffset * 7);
+      const monday = new Date(today.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
 
-    const dates = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      dates.push(d);
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d);
+      }
+      return dates;
+    } else if (plannerViewMode === '1month') {
+      const targetMonth = new Date(today.getFullYear(), today.getMonth() + weekOffset, 1);
+      const year = targetMonth.getFullYear();
+      const month = targetMonth.getMonth();
+      
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const dates = [];
+      for (let i = 1; i <= daysInMonth; i++) {
+        dates.push(new Date(year, month, i, 0, 0, 0, 0));
+      }
+      return dates;
+    } else {
+      return [];
     }
-    return dates;
-  }, [weekOffset]);
+  }, [plannerViewMode, weekOffset]);
 
   // Count scheduled/due reviews for a specific date
   const getScheduledCountForDay = (date: Date): number => {
@@ -265,7 +331,26 @@ export const ReviewSession: React.FC = () => {
     let successRatesSum = 0;
     let daysWithReviews = 0;
 
-    weekDates.forEach(date => {
+    if (plannerViewMode === '1year') {
+      const now = new Date();
+      const year = now.getFullYear() + weekOffset;
+      const records = getTelemetry();
+      const yearRecords = records.filter(r => {
+        try {
+          return new Date(r.timestamp).getFullYear() === year;
+        } catch {
+          return false;
+        }
+      });
+      totalCompleted = yearRecords.length;
+      totalSeconds = yearRecords.reduce((sum, r) => sum + r.timeSpentSeconds, 0);
+      const correct = yearRecords.filter(r => r.isCorrect).length;
+      const avgSuccessRate = totalCompleted > 0 ? Math.round((correct / totalCompleted) * 100) : 100;
+      
+      return { totalCompleted, totalSeconds, avgSuccessRate };
+    }
+
+    activeDates.forEach(date => {
       const dateKey = formatDateKey(date);
       const { completed, totalSeconds: dsSec, successRate } = getTelemetryStatsForDay(dateKey);
       totalCompleted += completed;
@@ -283,7 +368,56 @@ export const ReviewSession: React.FC = () => {
       totalSeconds,
       avgSuccessRate
     };
-  }, [weekDates, telemetryStateTrigger]);
+  }, [plannerViewMode, activeDates, weekOffset, telemetryStateTrigger]);
+
+  // Countdown timers helper functions
+  const getYearCountdown = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
+    const diffMs = endOfYear.getTime() - now.getTime();
+    if (diffMs <= 0) return '0d 0h 0m 0s';
+    
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+    return `${days}d ${hours}h ${mins}m ${secs}s`;
+  };
+
+  const getQuarterCountdown = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    let endMonth;
+    if (month <= 2) endMonth = 2; // Q1 ends in March
+    else if (month <= 5) endMonth = 5; // Q2 ends in June
+    else if (month <= 8) endMonth = 8; // Q3 ends in September
+    else endMonth = 11; // Q4 ends in December
+    
+    const endOfQuarter = new Date(year, endMonth + 1, 0, 23, 59, 59, 999);
+    const diffMs = endOfQuarter.getTime() - now.getTime();
+    if (diffMs <= 0) return '0d 0h 0m 0s';
+    
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+    return `${days}d ${hours}h ${mins}m ${secs}s`;
+  };
+
+  const getCustomCountdown = (targetDateStr: string): string => {
+    const now = new Date();
+    const target = new Date(targetDateStr);
+    const diffMs = target.getTime() - now.getTime();
+    if (diffMs <= 0) return 'Concluído!';
+    
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+    return `${days}d ${hours}h ${mins}m ${secs}s`;
+  };
 
   // Dashboard calculations
   const stats = useMemo(() => {
@@ -1872,274 +2006,787 @@ export const ReviewSession: React.FC = () => {
         {/* ======================================= */}
         {/* TAB 2: WEEKLY PLANNER VIEW              */}
         {/* ======================================= */}
+        {/* ======================================= */}
+        {/* TAB 2: WEEKLY PLANNER VIEW              */}
+        {/* ======================================= */}
         {activeSubTab === 'planner' && (
-          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className={`fade-in planner-root font-${plannerFontSize}`} style={{ display: 'flex', gap: '16px', minHeight: '600px', width: '100%', position: 'relative' }}>
             
-            {/* Header & Week Navigation Controls */}
-            <div className="glass-card" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  📅 Planejamento da Semana
-                </h3>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  Organize seus objetivos de estudos e acompanhe sua telemetria diária
-                </span>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* 1. LEFT SIDEBAR: SAVED WEEKS */}
+            <div 
+              className="glass-card planner-sidebar" 
+              style={{ 
+                width: sidebarCollapsed ? '48px' : '220px', 
+                flexShrink: 0, 
+                transition: 'all 0.3s ease', 
+                overflow: 'hidden', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '16px', 
+                padding: '12px',
+                borderRight: '1px solid var(--border)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'space-between', alignItems: 'center' }}>
+                {!sidebarCollapsed && <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'white' }}>📅 Cronologia</span>}
                 <button 
-                  onClick={() => setWeekOffset(prev => prev - 1)}
-                  className="btn-icon"
-                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', gap: '4px' }}
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px' }}
+                  title={sidebarCollapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
                 >
-                  ◀ Anterior
-                </button>
-                <button 
-                  onClick={() => setWeekOffset(0)}
-                  className="btn-icon"
-                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', fontWeight: 700 }}
-                >
-                  Hoje
-                </button>
-                <button 
-                  onClick={() => setWeekOffset(prev => prev + 1)}
-                  className="btn-icon"
-                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', gap: '4px' }}
-                >
-                  Próxima ▶
+                  {sidebarCollapsed ? '▶' : '◀'}
                 </button>
               </div>
-            </div>
 
-            {/* Weekly Summary Dashboard Banner */}
-            <div className="weekly-summary-panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Revisões Concluídas</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{weeklySummaryStats.totalCompleted} cards</span>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Foco nesta semana</span>
-              </div>
-              
-              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tempo de Estudo</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)' }}>
-                  {weeklySummaryStats.totalSeconds >= 60 
-                    ? `${Math.floor(weeklySummaryStats.totalSeconds / 60)}m ${weeklySummaryStats.totalSeconds % 60}s` 
-                    : `${weeklySummaryStats.totalSeconds}s`}
-                </span>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Métrica de dedicação</span>
-              </div>
+              {!sidebarCollapsed && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Semanas de Estudo</span>
+                  {[-4, -3, -2, -1, 0, 1, 2].map((offsetVal) => {
+                    const today = new Date();
+                    const day = today.getDay();
+                    const startDiff = today.getDate() - day + (day === 0 ? -6 : 1) + (offsetVal * 7);
+                    const weekStart = new Date(today.setDate(startDiff));
+                    const weekEnd = new Date(weekStart);
+                    weekEnd.setDate(weekStart.getDate() + 6);
+                    
+                    const isSelected = weekOffset === offsetVal && plannerViewMode === '1week';
+                    const isCurrent = offsetVal === 0;
 
-              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Aproveitamento Médio</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#eab308' }}>{weeklySummaryStats.avgSuccessRate}%</span>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Taxa de acertos</span>
-              </div>
+                    const labelStart = weekStart.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+                    const labelEnd = weekEnd.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 
-              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Idioma em Estudo</span>
-                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{getLanguageName(targetLanguage)}</span>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ativo para revisão</span>
-              </div>
-            </div>
-
-            {/* 7-Day Weekly Grid Container */}
-            <div className="weekly-planner-grid">
-              {weekDates.map((date) => {
-                const dateKey = formatDateKey(date);
-                const dayName = date.toLocaleDateString('pt-BR', { weekday: 'long' });
-                const dayNameCap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-                const dateDisplay = date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-                
-                const isToday = formatDateKey(new Date()) === dateKey;
-                const scheduled = getScheduledCountForDay(date);
-                const { completed, totalSeconds: daySec, successRate } = getTelemetryStatsForDay(dateKey);
-                
-                const notes = plannerNotes[dateKey] || '';
-                const tasks = plannerTasks[dateKey] || [];
-                const taskInput = taskInputs[dateKey] || '';
-                
-                return (
-                  <div 
-                    key={dateKey} 
-                    className="glass-card" 
-                    style={{ 
-                      padding: '12px', 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      gap: '12px',
-                      border: isToday ? '1px solid var(--accent)' : '1px solid var(--border)',
-                      boxShadow: isToday ? '0 0 12px rgba(139, 92, 246, 0.15)' : 'none',
-                      background: isToday ? 'rgba(139, 92, 246, 0.02)' : 'rgba(255, 255, 255, 0.01)'
-                    }}
-                  >
-                    {/* Day Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: isToday ? 'var(--accent)' : 'white' }}>
-                          {dayNameCap.split('-')[0]}
-                        </span>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{dateDisplay}</span>
-                      </div>
-                      {isToday && (
-                        <span style={{ fontSize: '0.58rem', background: 'var(--accent)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontWeight: 800 }}>
-                          HOJE
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Stats Dashboard for the Day */}
-                    <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', padding: '6px 8px', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Agendados:</span>
-                        <span style={{ fontWeight: 700, color: 'white' }}>{scheduled}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Completados:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--success)' }}>{completed}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Estudo:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
-                          {daySec >= 60 ? `${Math.floor(daySec / 60)}m` : `${daySec}s`}
-                        </span>
-                      </div>
-                      {completed > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '3px', marginTop: '2px' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>Aproveitamento:</span>
-                          <span style={{ fontWeight: 700, color: '#eab308' }}>{successRate}%</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Annotations/Notes */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estudo & Insights</span>
-                      <textarea
-                        className="input-text"
-                        placeholder="Objetivos de hoje..."
-                        value={notes}
-                        onChange={(e) => {
-                          const updated = { ...plannerNotes, [dateKey]: e.target.value };
-                          setPlannerNotes(updated);
-                          localStorage.setItem('hl_weekly_planner_notes', JSON.stringify(updated));
+                    return (
+                      <button
+                        key={offsetVal}
+                        onClick={() => {
+                          setWeekOffset(offsetVal);
+                          setPlannerViewMode('1week');
                         }}
-                        style={{ 
-                          width: '100%', 
-                          minHeight: '60px', 
-                          fontSize: '0.72rem', 
-                          padding: '6px', 
-                          background: 'rgba(255,255,255,0.01)', 
-                          border: '1px solid rgba(255,255,255,0.05)',
-                          borderRadius: '4px',
-                          color: 'white',
-                          resize: 'vertical',
-                          lineHeight: 1.3
+                        style={{
+                          background: isSelected ? 'var(--accent)' : 'rgba(255, 255, 255, 0.02)',
+                          border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                          color: isSelected ? 'white' : 'var(--text-secondary)',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                          fontSize: '0.72rem',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          transition: 'all 0.2s'
                         }}
-                      />
-                    </div>
-
-                    {/* Task Checklist */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tarefas</span>
-                      
-                      {/* Task items list */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
-                        {tasks.length === 0 ? (
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma tarefa.</span>
-                        ) : (
-                          tasks.map(task => (
-                            <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', background: 'rgba(255,255,255,0.02)', padding: '4px 6px', borderRadius: '4px' }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', cursor: 'pointer', flex: 1, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text-muted)' : 'white' }}>
-                                <input 
-                                  type="checkbox"
-                                  checked={task.done}
-                                  onChange={() => {
-                                    const updatedTasks = tasks.map(t => t.id === task.id ? { ...t, done: !t.done } : t);
-                                    const updated = { ...plannerTasks, [dateKey]: updatedTasks };
-                                    setPlannerTasks(updated);
-                                    localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
-                                  }}
-                                  style={{ cursor: 'pointer' }}
-                                />
-                                {task.text}
-                              </label>
-                              <button 
-                                onClick={() => {
-                                  const updatedTasks = tasks.filter(t => t.id !== task.id);
-                                  const updated = { ...plannerTasks, [dateKey]: updatedTasks };
-                                  setPlannerTasks(updated);
-                                  localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
-                                }}
-                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 4px', display: 'flex', alignItems: 'center' }}
-                                title="Excluir tarefa"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {/* Add task input */}
-                      <form 
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (!taskInput.trim()) return;
-                          const currentTasks = plannerTasks[dateKey] || [];
-                          const updated = { 
-                            ...plannerTasks, 
-                            [dateKey]: [...currentTasks, { id: Math.random().toString(36).slice(2, 9), text: taskInput.trim(), done: false }]
-                          };
-                          setPlannerTasks(updated);
-                          localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
-                          
-                          setTaskInputs(prev => ({ ...prev, [dateKey]: '' }));
-                        }}
-                        style={{ display: 'flex', gap: '4px', marginTop: '2px' }}
                       >
-                        <input
-                          type="text"
-                          placeholder="Nova tarefa..."
-                          value={taskInput}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setTaskInputs(prev => ({ ...prev, [dateKey]: val }));
+                        <span style={{ fontWeight: 700 }}>
+                          {labelStart} - {labelEnd}
+                        </span>
+                        <span style={{ fontSize: '0.6rem', opacity: 0.8 }}>
+                          {isCurrent ? '⭐ Semana Atual' : `Offset: ${offsetVal}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. MAIN AREA */}
+            <div className="planner-main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowX: 'hidden' }}>
+              
+              {/* Header & Advanced Settings Toolbar */}
+              <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                      📅 Planejador de Estudos Inteligente
+                    </h3>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Organize suas revisões diárias, configure cronômetros e acompanhe sua produtividade
+                    </span>
+                  </div>
+                  
+                  {/* Week/Month pagination */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      onClick={() => setWeekOffset(prev => prev - 1)}
+                      className="btn-icon"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
+                    >
+                      ◀ Anterior
+                    </button>
+                    <button 
+                      onClick={() => setWeekOffset(0)}
+                      className="btn-icon"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', fontWeight: 700 }}
+                    >
+                      Hoje / Atual
+                    </button>
+                    <button 
+                      onClick={() => setWeekOffset(prev => prev + 1)}
+                      className="btn-icon"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px' }}
+                    >
+                      Próxima ▶
+                    </button>
+                  </div>
+                </div>
+
+                {/* Advanced Controls Bar */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                  
+                  {/* View mode switcher */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Visualização:</span>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {([
+                        { id: '3days', label: '3 Dias' },
+                        { id: '1week', label: 'Semana' },
+                        { id: '1month', label: 'Mês' },
+                        { id: '1year', label: 'Ano' }
+                      ] as const).map(mode => (
+                        <button
+                          key={mode.id}
+                          onClick={() => {
+                            setPlannerViewMode(mode.id);
+                            setWeekOffset(0);
                           }}
-                          style={{ 
-                            flex: 1, 
-                            fontSize: '0.68rem', 
-                            padding: '4px 6px', 
-                            background: 'var(--bg-secondary)', 
-                            border: '1px solid var(--border)', 
-                            borderRadius: '4px',
-                            color: 'white',
-                            height: '24px'
-                          }}
-                        />
-                        <button 
-                          type="submit"
-                          style={{ 
-                            background: 'var(--accent)', 
-                            border: 'none', 
-                            color: 'white', 
-                            fontSize: '0.8rem', 
-                            padding: '0 8px', 
-                            borderRadius: '4px', 
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: '24px'
+                          style={{
+                            background: plannerViewMode === mode.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
+                            border: '1px solid var(--border)',
+                            color: plannerViewMode === mode.id ? 'white' : 'var(--text-secondary)',
+                            padding: '4px 10px',
+                            borderRadius: '20px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
                           }}
                         >
-                          +
+                          {mode.label}
                         </button>
-                      </form>
+                      ))}
                     </div>
-
                   </div>
-                );
-              })}
+
+                  {/* Font Size Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tamanho Fonte:</span>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {([
+                        { id: 'normal', label: 'A' },
+                        { id: 'large', label: 'A+' },
+                        { id: 'xlarge', label: 'A++' }
+                      ] as const).map(sz => (
+                        <button
+                          key={sz.id}
+                          onClick={() => setPlannerFontSize(sz.id)}
+                          style={{
+                            background: plannerFontSize === sz.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
+                            border: '1px solid var(--border)',
+                            color: plannerFontSize === sz.id ? 'white' : 'var(--text-secondary)',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            minWidth: '28px'
+                          }}
+                        >
+                          {sz.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Countdown Visibility toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox"
+                        checked={showCountdowns}
+                        onChange={(e) => setShowCountdowns(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Mostrar Cronômetros
+                    </label>
+                  </div>
+
+                </div>
+
+                {/* Add Custom Countdown Form inside Advanced Bar */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', width: '100%' }}>
+                    ➕ Adicionar Cronômetro Regressivo de Meta
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Título da meta (ex: Exame de Proficiência)"
+                    className="input-text"
+                    value={newCountdownTitle}
+                    onChange={(e) => setNewCountdownTitle(e.target.value)}
+                    style={{ flex: 2, minWidth: '180px', fontSize: '0.75rem', height: '28px' }}
+                  />
+                  <input
+                    type="date"
+                    className="input-text"
+                    value={newCountdownDate}
+                    onChange={(e) => setNewCountdownDate(e.target.value)}
+                    style={{ flex: 1, minWidth: '120px', fontSize: '0.75rem', height: '28px' }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newCountdownTitle.trim() || !newCountdownDate) return;
+                      const nextCd = [...customCountdowns, { id: Math.random().toString(36).slice(2, 9), title: newCountdownTitle.trim(), targetDate: newCountdownDate }];
+                      setCustomCountdowns(nextCd);
+                      localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                      setNewCountdownTitle('');
+                      setNewCountdownDate('');
+                    }}
+                    className="btn btn-primary"
+                    style={{ padding: '0 12px', fontSize: '0.75rem', height: '28px', borderRadius: '4px' }}
+                  >
+                    Adicionar
+                  </button>
+                </div>
+
+              </div>
+
+              {/* 3. COUNTDOWN TIMERS BLOCK */}
+              {showCountdowns && (
+                <div className="countdown-timers-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div className="glass-card" style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)' }}>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Contagem Regressiva do Ano</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getYearCountdown()}</span>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Para o final de {new Date().getFullYear()}</span>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid #eab308' }}>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Contagem do Trimestre</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getQuarterCountdown()}</span>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Foco no trimestre ativo</span>
+                  </div>
+
+                  {customCountdowns.map(cd => (
+                    <div 
+                      key={cd.id} 
+                      className="glass-card" 
+                      style={{ padding: '12px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--success)' }}
+                    >
+                      <button
+                        onClick={() => {
+                          const nextCd = customCountdowns.filter(c => c.id !== cd.id);
+                          setCustomCountdowns(nextCd);
+                          localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                        }}
+                        style={{ position: 'absolute', right: '8px', top: '8px', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer' }}
+                        title="Remover cronômetro"
+                      >
+                        &times;
+                      </button>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', paddingRight: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        🎯 {cd.title}
+                      </span>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getCustomCountdown(cd.targetDate)}</span>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Meta: {new Date(cd.targetDate).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 4. SUMMARY STATISTICS DASHBOARD */}
+              {plannerViewMode !== '1year' && (
+                <div className="weekly-summary-panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Revisões Concluídas</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{weeklySummaryStats.totalCompleted} cards</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Foco no período ativo</span>
+                  </div>
+                  
+                  <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tempo de Estudo</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)' }}>
+                      {weeklySummaryStats.totalSeconds >= 60 
+                        ? `${Math.floor(weeklySummaryStats.totalSeconds / 60)}m ${weeklySummaryStats.totalSeconds % 60}s` 
+                        : `${weeklySummaryStats.totalSeconds}s`}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Métrica de dedicação</span>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Aproveitamento Médio</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#eab308' }}>{weeklySummaryStats.avgSuccessRate}%</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Taxa de acertos</span>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Idioma em Estudo</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{getLanguageName(targetLanguage)}</span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ativo para revisão</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. CALENDAR VIEW GRIDS */}
+              {plannerViewMode !== '1year' && (
+                <div 
+                  className="weekly-planner-grid" 
+                  style={{
+                    gridTemplateColumns: plannerViewMode === '3days' ? 'repeat(3, 1fr)' : plannerViewMode === '1month' ? 'repeat(7, 1fr)' : 'repeat(7, 1fr)',
+                    gap: '10px'
+                  }}
+                >
+                  {activeDates.map((date) => {
+                    const dateKey = formatDateKey(date);
+                    const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
+                    const dayNameCap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+                    const dateDisplay = date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+                    
+                    const isToday = formatDateKey(new Date()) === dateKey;
+                    const scheduled = getScheduledCountForDay(date);
+                    const { completed, totalSeconds: daySec, successRate } = getTelemetryStatsForDay(dateKey);
+                    
+                    const notes = plannerNotes[dateKey] || '';
+                    const tasks = plannerTasks[dateKey] || [];
+                    const taskInput = taskInputs[dateKey] || '';
+                    
+                    return (
+                      <div 
+                        key={dateKey} 
+                        className="glass-card" 
+                        style={{ 
+                          padding: plannerViewMode === '1month' ? '8px' : '12px', 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: plannerViewMode === '1month' ? '6px' : '12px',
+                          border: isToday ? '1px solid var(--accent)' : '1px solid var(--border)',
+                          boxShadow: isToday ? '0 0 12px rgba(139, 92, 246, 0.15)' : 'none',
+                          background: isToday ? 'rgba(139, 92, 246, 0.02)' : 'rgba(255, 255, 255, 0.01)',
+                          minWidth: 0
+                        }}
+                      >
+                        {/* Day Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? 'var(--accent)' : 'white' }}>
+                              {dayNameCap.split('.')[0]}
+                            </span>
+                            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{dateDisplay}</span>
+                          </div>
+                          {isToday && (
+                            <span style={{ fontSize: '0.52rem', background: 'var(--accent)', color: 'white', padding: '1px 4px', borderRadius: '4px', fontWeight: 800 }}>
+                              HOJE
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Stats Dashboard for the Day */}
+                        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', padding: '4px 6px', fontSize: '0.65rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Agendados:</span>
+                            <span style={{ fontWeight: 700, color: 'white' }}>{scheduled}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Feitos:</span>
+                            <span style={{ fontWeight: 700, color: 'var(--success)' }}>{completed}</span>
+                          </div>
+                          {plannerViewMode !== '1month' && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>Tempo:</span>
+                              <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
+                                {daySec >= 60 ? `${Math.floor(daySec / 60)}m` : `${daySec}s`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Annotations/Notes */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {plannerViewMode !== '1month' && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estudo & Insights</span>}
+                          <textarea
+                            className="input-text"
+                            placeholder={plannerViewMode === '1month' ? 'Notas...' : 'Estudo & Insights...'}
+                            value={notes}
+                            onChange={(e) => {
+                              const updated = { ...plannerNotes, [dateKey]: e.target.value };
+                              setPlannerNotes(updated);
+                              localStorage.setItem('hl_weekly_planner_notes', JSON.stringify(updated));
+                            }}
+                            style={{ 
+                              width: '100%', 
+                              minHeight: plannerViewMode === '1month' ? '40px' : '60px', 
+                              fontSize: '0.68rem', 
+                              padding: '4px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              border: '1px solid rgba(255,255,255,0.05)',
+                              borderRadius: '4px',
+                              color: 'white',
+                              resize: 'vertical',
+                              lineHeight: 1.25
+                            }}
+                          />
+                        </div>
+
+                        {/* Task Checklist */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {plannerViewMode !== '1month' && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tarefas</span>}
+                          
+                          {plannerViewMode !== '1month' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
+                              {tasks.length === 0 ? (
+                                <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma tarefa.</span>
+                              ) : (
+                                tasks.map(task => (
+                                  <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', background: 'rgba(255,255,255,0.02)', padding: '3px 4px', borderRadius: '4px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', cursor: 'pointer', flex: 1, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text-muted)' : 'white' }}>
+                                      <input 
+                                        type="checkbox"
+                                        checked={task.done}
+                                        onChange={() => {
+                                          const updatedTasks = tasks.map(t => t.id === task.id ? { ...t, done: !t.done } : t);
+                                          const updated = { ...plannerTasks, [dateKey]: updatedTasks };
+                                          setPlannerTasks(updated);
+                                          localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                                        }}
+                                        style={{ cursor: 'pointer' }}
+                                      />
+                                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80px' }}>{task.text}</span>
+                                    </label>
+                                    <button 
+                                      onClick={() => {
+                                        const updatedTasks = tasks.filter(t => t.id !== task.id);
+                                        const updated = { ...plannerTasks, [dateKey]: updatedTasks };
+                                        setPlannerTasks(updated);
+                                        localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                                      }}
+                                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}
+                                    >
+                                      &times;
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+
+                          {/* Add task input */}
+                          <form 
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              if (!taskInput.trim()) return;
+                              const currentTasks = plannerTasks[dateKey] || [];
+                              const updated = { 
+                                ...plannerTasks, 
+                                [dateKey]: [...currentTasks, { id: Math.random().toString(36).slice(2, 9), text: taskInput.trim(), done: false }]
+                              };
+                              setPlannerTasks(updated);
+                              localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                              setTaskInputs(prev => ({ ...prev, [dateKey]: '' }));
+                            }}
+                            style={{ display: 'flex', gap: '2px', marginTop: '2px' }}
+                          >
+                            <input
+                              type="text"
+                              placeholder={plannerViewMode === '1month' ? '+' : 'Tarefa...'}
+                              value={taskInput}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTaskInputs(prev => ({ ...prev, [dateKey]: val }));
+                              }}
+                              style={{ 
+                                flex: 1, 
+                                fontSize: '0.62rem', 
+                                padding: '2px 4px', 
+                                background: 'var(--bg-secondary)', 
+                                border: '1px solid var(--border)', 
+                                borderRadius: '4px',
+                                color: 'white',
+                                height: '22px'
+                              }}
+                            />
+                            <button 
+                              type="submit"
+                              style={{ 
+                                background: 'var(--accent)', 
+                                border: 'none', 
+                                color: 'white', 
+                                fontSize: '0.75rem', 
+                                padding: '0 6px', 
+                                borderRadius: '4px', 
+                                cursor: 'pointer',
+                                height: '22px'
+                              }}
+                            >
+                              +
+                            </button>
+                          </form>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 1 Year View Mode */}
+              {plannerViewMode === '1year' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className="glass-card" style={{ padding: '16px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '1rem', fontWeight: 800, color: 'white' }}>
+                      📅 Ano de {new Date().getFullYear() + weekOffset}
+                    </span>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                      Resumo anual de estudos. Clique em qualquer mês para abrir o planejador daquele período.
+                    </p>
+                  </div>
+
+                  <div className="weekly-planner-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+                    {Array.from({ length: 12 }).map((_, idx) => {
+                      const now = new Date();
+                      const targetYear = now.getFullYear() + weekOffset;
+                      const monthDate = new Date(targetYear, idx, 1);
+                      const monthName = monthDate.toLocaleDateString('pt-BR', { month: 'long' });
+                      const monthNameCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                      
+                      const records = getTelemetry();
+                      const monthRecords = records.filter(r => {
+                        try {
+                          const dateObj = new Date(r.timestamp);
+                          return dateObj.getFullYear() === targetYear && dateObj.getMonth() === idx;
+                        } catch {
+                          return false;
+                        }
+                      });
+                      
+                      const completedCount = monthRecords.length;
+                      const studySeconds = monthRecords.reduce((sum, r) => sum + r.timeSpentSeconds, 0);
+
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => {
+                            const currentMonthIndex = now.getMonth();
+                            const currentYear = now.getFullYear();
+                            const totalMonthsDiff = (targetYear - currentYear) * 12 + (idx - currentMonthIndex);
+                            setWeekOffset(totalMonthsDiff);
+                            setPlannerViewMode('1month');
+                          }}
+                          className="glass-card"
+                          style={{ 
+                            padding: '14px', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '8px', 
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            border: '1px solid var(--border)',
+                            background: 'rgba(255,255,255,0.01)'
+                          }}
+                        >
+                          <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--accent)' }}>{monthNameCap}</span>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                            <div>✅ <strong>{completedCount}</strong> cards revisados</div>
+                            <div>⏱️ <strong>{studySeconds >= 60 ? `${Math.floor(studySeconds / 60)}m` : `${studySeconds}s`}</strong> estudados</div>
+                          </div>
+
+                          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px', marginTop: '4px', textAlign: 'right' }}>
+                            Abrir planejamento ➜
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. KANBAN BOARD SECTION (Notion-Style) */}
+              {plannerViewMode !== '1year' && (
+                <div className="kanban-section" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      📋 Quadro Kanban Notion-Style
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      Mapeie tarefas complexas e mude-as de coluna conforme progride
+                    </span>
+                  </div>
+
+                  <div className="kanban-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    {([
+                      { id: 'todo', label: '📝 A Fazer', color: 'var(--accent)' },
+                      { id: 'progress', label: '⚡ Em Progresso', color: '#eab308' },
+                      { id: 'done', label: '✅ Concluído', color: 'var(--success)' }
+                    ] as const).map(col => {
+                      const colCards = kanbanCards.filter(c => c.col === col.id);
+                      const titleInput = newKanbanTitle[col.id] || '';
+                      const descInput = newKanbanDesc[col.id] || '';
+
+                      return (
+                        <div 
+                          key={col.id} 
+                          className="glass-card" 
+                          style={{ 
+                            padding: '14px', 
+                            background: 'rgba(255, 255, 255, 0.01)', 
+                            border: '1px solid var(--border)',
+                            borderRadius: '8px',
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '12px',
+                            minHeight: '250px'
+                          }}
+                        >
+                          {/* Column Header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${col.color}`, paddingBottom: '6px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'white' }}>{col.label}</span>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '10px' }}>
+                              {colCards.length}
+                            </span>
+                          </div>
+
+                          {/* Quick Add Form inside column */}
+                          <form 
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              if (!titleInput.trim()) return;
+                              
+                              const newCard = {
+                                id: Math.random().toString(36).slice(2, 9),
+                                title: titleInput.trim(),
+                                desc: descInput.trim(),
+                                col: col.id
+                              };
+                              const nextCards = [...kanbanCards, newCard];
+                              setKanbanCards(nextCards);
+                              localStorage.setItem('hl_planner_kanban', JSON.stringify(nextCards));
+                              
+                              setNewKanbanTitle(prev => ({ ...prev, [col.id]: '' }));
+                              setNewKanbanDesc(prev => ({ ...prev, [col.id]: '' }));
+                            }}
+                            style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.15)', padding: '8px', borderRadius: '6px' }}
+                          >
+                            <input
+                              type="text"
+                              placeholder="+ Novo cartão..."
+                              value={titleInput}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNewKanbanTitle(prev => ({ ...prev, [col.id]: val }));
+                              }}
+                              style={{ fontSize: '0.72rem', padding: '4px 6px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'white' }}
+                            />
+                            {titleInput.trim().length > 0 && (
+                              <input
+                                type="text"
+                                placeholder="Descrição rápida..."
+                                value={descInput}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setNewKanbanDesc(prev => ({ ...prev, [col.id]: val }));
+                                }}
+                                style={{ fontSize: '0.65rem', padding: '4px 6px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '4px', color: 'white' }}
+                              />
+                            )}
+                            {titleInput.trim().length > 0 && (
+                              <button 
+                                type="submit" 
+                                className="btn btn-primary" 
+                                style={{ padding: '3px 8px', fontSize: '0.68rem', borderRadius: '4px', height: '24px' }}
+                              >
+                                Salvar
+                              </button>
+                            )}
+                          </form>
+
+                          {/* Column Cards mapping */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto' }}>
+                            {colCards.map(card => (
+                              <div 
+                                key={card.id} 
+                                className="glass-card" 
+                                style={{ 
+                                  padding: '8px 10px', 
+                                  background: 'rgba(255,255,255,0.02)', 
+                                  border: '1px solid rgba(255,255,255,0.04)',
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  gap: '4px',
+                                  position: 'relative'
+                                }}
+                              >
+                                <button
+                                  onClick={() => {
+                                    const nextCards = kanbanCards.filter(c => c.id !== card.id);
+                                    setKanbanCards(nextCards);
+                                    localStorage.setItem('hl_planner_kanban', JSON.stringify(nextCards));
+                                  }}
+                                  style={{ position: 'absolute', right: '6px', top: '6px', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer' }}
+                                  title="Excluir cartão"
+                                >
+                                  &times;
+                                </button>
+                                
+                                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'white', paddingRight: '12px' }}>
+                                  {card.title}
+                                </span>
+                                {card.desc && (
+                                  <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                                    {card.desc}
+                                  </span>
+                                )}
+
+                                {/* Shift buttons */}
+                                <div style={{ display: 'flex', gap: '4px', marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '4px', justifyContent: 'flex-end' }}>
+                                  <button
+                                    disabled={col.id === 'todo'}
+                                    onClick={() => {
+                                      const cols: ('todo' | 'progress' | 'done')[] = ['todo', 'progress', 'done'];
+                                      const updated = kanbanCards.map(c => {
+                                        if (c.id === card.id) {
+                                          const curIdx = cols.indexOf(c.col);
+                                          const nextIdx = Math.max(0, curIdx - 1);
+                                          return { ...c, col: cols[nextIdx] };
+                                        }
+                                        return c;
+                                      });
+                                      setKanbanCards(updated);
+                                      localStorage.setItem('hl_planner_kanban', JSON.stringify(updated));
+                                    }}
+                                    style={{ background: 'none', border: 'none', color: col.id === 'todo' ? 'rgba(255,255,255,0.1)' : 'var(--text-muted)', cursor: col.id === 'todo' ? 'default' : 'pointer', fontSize: '0.68rem', padding: '2px 4px' }}
+                                    title="Mover para esquerda"
+                                  >
+                                    ◀
+                                  </button>
+                                  <button
+                                    disabled={col.id === 'done'}
+                                    onClick={() => {
+                                      const cols: ('todo' | 'progress' | 'done')[] = ['todo', 'progress', 'done'];
+                                      const updated = kanbanCards.map(c => {
+                                        if (c.id === card.id) {
+                                          const curIdx = cols.indexOf(c.col);
+                                          const nextIdx = Math.min(2, curIdx + 1);
+                                          return { ...c, col: cols[nextIdx] };
+                                        }
+                                        return c;
+                                      });
+                                      setKanbanCards(updated);
+                                      localStorage.setItem('hl_planner_kanban', JSON.stringify(updated));
+                                    }}
+                                    style={{ background: 'none', border: 'none', color: col.id === 'done' ? 'rgba(255,255,255,0.1)' : 'var(--text-muted)', cursor: col.id === 'done' ? 'default' : 'pointer', fontSize: '0.68rem', padding: '2px 4px' }}
+                                    title="Mover para direita"
+                                  >
+                                    ▶
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
             </div>
 
           </div>

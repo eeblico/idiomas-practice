@@ -1850,6 +1850,56 @@ button, input, textarea, select {
   }
 }
 
+/* Font Scaling Utilities for Planner */
+.font-large span, 
+.font-large h3, 
+.font-large button, 
+.font-large label, 
+.font-large input, 
+.font-large textarea, 
+.font-large p,
+.font-large strong,
+.font-large div {
+  font-size: 1.12rem !important;
+}
+
+.font-large .weekly-planner-grid textarea {
+  font-size: 0.88rem !important;
+}
+
+.font-large .weekly-planner-grid span {
+  font-size: 0.92rem !important;
+}
+
+.font-xlarge span, 
+.font-xlarge h3, 
+.font-xlarge button, 
+.font-xlarge label, 
+.font-xlarge input, 
+.font-xlarge textarea, 
+.font-xlarge p,
+.font-xlarge strong,
+.font-xlarge div {
+  font-size: 1.28rem !important;
+}
+
+.font-xlarge .weekly-planner-grid textarea {
+  font-size: 1.05rem !important;
+}
+
+.font-xlarge .weekly-planner-grid span {
+  font-size: 1.1rem !important;
+}
+
+/* Sidebar transitions */
+.planner-sidebar button {
+  transition: all 0.2s ease-in-out;
+}
+.planner-sidebar button:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: white !important;
+}
+
 
 
 
