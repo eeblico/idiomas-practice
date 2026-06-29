@@ -82,7 +82,7 @@ export const ReviewSession: React.FC = () => {
   } = useApp();
 
   // Navigation & Layout
-  const [activeSubTab, setActiveSubTab] = useState<'practice' | 'library'>('practice');
+  const [activeSubTab, setActiveSubTab] = useState<'practice' | 'planner'>('practice');
   const [sessionActive, setSessionActive] = useState(false);
   const [sessionType, setSessionType] = useState<'due' | 'new' | 'all' | 'starred'>('due');
   const [showInsights, setShowInsights] = useState(true);
@@ -98,11 +98,25 @@ export const ReviewSession: React.FC = () => {
   const [revealTranslationOnly, setRevealTranslationOnly] = useState<boolean>(false);
   const [revealTextOnly, setRevealTextOnly] = useState<boolean>(false);
 
-  // Library tab filter states
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('text');
-  const [selectedGrouping, setSelectedGrouping] = useState<'none' | 'collection' | 'category' | 'level' | 'tags'>('none');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  // Weekly Planner states
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [plannerNotes, setPlannerNotes] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('hl_weekly_planner_notes');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [plannerTasks, setPlannerTasks] = useState<Record<string, { id: string; text: string; done: boolean }[]>>(() => {
+    try {
+      const stored = localStorage.getItem('hl_weekly_planner_tasks');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [taskInputs, setTaskInputs] = useState<Record<string, string>>({});
 
   // Study Modes / Games selection
   const [reviewMode, setReviewMode] = useState<'flashcard' | 'cloze' | 'scramble' | 'listening' | 'writing'>('flashcard');
@@ -153,10 +167,6 @@ export const ReviewSession: React.FC = () => {
 
   const nowTime = useMemo(() => new Date().getTime(), [sessionActive]);
 
-  // Clean tag input helper
-  const [editingPhraseTagsId, setEditingPhraseTagsId] = useState<string | null>(null);
-  const [phraseTagsInput, setPhraseTagsInput] = useState<string>('');
-
   // General filtered list for review selection
   const filteredPhrasesForReview = useMemo(() => {
     let list = phrases.filter(p => p.language_id === targetLanguage);
@@ -174,68 +184,106 @@ export const ReviewSession: React.FC = () => {
     return list;
   }, [phrases, targetLanguage, reviewCategoryFilter, starsFilter, phraseStars]);
 
-  // Library filtered phrases list
-  const filteredPhrasesForLibrary = useMemo(() => {
-    let list = phrases.filter(p => p.language_id === targetLanguage);
+  // Generate YYYY-MM-DD key for Date
+  const formatDateKey = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(p => 
-        p.text.toLowerCase().includes(q) ||
-        p.translation.toLowerCase().includes(q) ||
-        (p.explanation && p.explanation.toLowerCase().includes(q)) ||
-        (p.tags && p.tags.some(t => t.toLowerCase().includes(q)))
-      );
+  // Get the 7 dates of the week based on weekOffset
+  const weekDates = useMemo(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1) + (weekOffset * 7);
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      dates.push(d);
     }
+    return dates;
+  }, [weekOffset]);
 
-    if (reviewCategoryFilter !== 'all') {
-      list = list.filter(p => p.category_id === reviewCategoryFilter);
-    }
+  // Count scheduled/due reviews for a specific date
+  const getScheduledCountForDay = (date: Date): number => {
+    const dateKey = formatDateKey(date);
+    const todayStr = formatDateKey(new Date());
+    const isToday = dateKey === todayStr;
+    
+    const comparisonDate = new Date();
+    comparisonDate.setHours(23, 59, 59, 999);
+    const isFuture = date.getTime() > comparisonDate.getTime();
 
-    if (starsFilter !== 'all') {
-      if (starsFilter === 'starred') {
-        list = list.filter(p => (phraseStars[p.id] || 0) > 0);
+    return phrases.filter(p => {
+      if (p.language_id !== targetLanguage) return false;
+      if (archivedPhrases.includes(p.id) || suspendedPhrases.includes(p.id)) return false;
+
+      const item = reviewItems[p.id];
+      if (!item) return false;
+
+      const nextReviewStr = item.next_review_date.slice(0, 10);
+
+      if (isToday) {
+        return nextReviewStr <= dateKey;
+      } else if (isFuture) {
+        return nextReviewStr === dateKey;
       } else {
-        const starVal = Number(starsFilter);
-        list = list.filter(p => (phraseStars[p.id] || 0) === starVal);
+        return nextReviewStr === dateKey;
       }
-    }
+    }).length;
+  };
 
-    if (statusFilter === 'favorites') {
-      list = list.filter(p => favorites.includes(p.id));
-    } else if (statusFilter === 'archived') {
-      list = list.filter(p => archivedPhrases.includes(p.id));
-    } else if (statusFilter === 'suspended') {
-      list = list.filter(p => suspendedPhrases.includes(p.id));
-    } else {
-      list = list.filter(p => !archivedPhrases.includes(p.id) && !suspendedPhrases.includes(p.id));
-    }
-
-    list = [...list].sort((a, b) => {
-      if (sortBy === 'text') {
-        return a.text.localeCompare(b.text);
+  // Count completed reviews and study time for a dateKey
+  const getTelemetryStatsForDay = (dateKey: string) => {
+    const records = getTelemetry();
+    const dayRecords = records.filter(r => {
+      try {
+        const recDateStr = new Date(r.timestamp).toISOString().slice(0, 10);
+        return recDateStr === dateKey;
+      } catch {
+        return false;
       }
-      if (sortBy === 'difficulty') {
-        const diffWeight = { hard: 3, medium: 2, easy: 1 };
-        const aDiff = diffWeight[(reviewItems[a.id]?.difficulty || 'medium') as 'easy' | 'medium' | 'hard'];
-        const bDiff = diffWeight[(reviewItems[b.id]?.difficulty || 'medium') as 'easy' | 'medium' | 'hard'];
-        return bDiff - aDiff;
-      }
-      if (sortBy === 'next_review') {
-        const aTime = reviewItems[a.id] ? new Date(reviewItems[a.id].next_review_date).getTime() : 9999999999999;
-        const bTime = reviewItems[b.id] ? new Date(reviewItems[b.id].next_review_date).getTime() : 9999999999999;
-        return aTime - bTime;
-      }
-      if (sortBy === 'stars') {
-        const aStars = phraseStars[a.id] || 0;
-        const bStars = phraseStars[b.id] || 0;
-        return bStars - aStars;
-      }
-      return a.id.localeCompare(b.id);
     });
 
-    return list;
-  }, [phrases, targetLanguage, searchQuery, reviewCategoryFilter, starsFilter, statusFilter, sortBy, favorites, archivedPhrases, suspendedPhrases, phraseStars, reviewItems]);
+    const completed = dayRecords.length;
+    const totalSeconds = dayRecords.reduce((sum, r) => sum + r.timeSpentSeconds, 0);
+    const correctCount = dayRecords.filter(r => r.isCorrect).length;
+    const successRate = completed > 0 ? Math.round((correctCount / completed) * 100) : 100;
+
+    return { completed, totalSeconds, successRate };
+  };
+
+  // Aggregate weekly stats for display
+  const weeklySummaryStats = useMemo(() => {
+    let totalCompleted = 0;
+    let totalSeconds = 0;
+    let successRatesSum = 0;
+    let daysWithReviews = 0;
+
+    weekDates.forEach(date => {
+      const dateKey = formatDateKey(date);
+      const { completed, totalSeconds: dsSec, successRate } = getTelemetryStatsForDay(dateKey);
+      totalCompleted += completed;
+      totalSeconds += dsSec;
+      if (completed > 0) {
+        successRatesSum += successRate;
+        daysWithReviews += 1;
+      }
+    });
+
+    const avgSuccessRate = daysWithReviews > 0 ? Math.round(successRatesSum / daysWithReviews) : 100;
+    
+    return {
+      totalCompleted,
+      totalSeconds,
+      avgSuccessRate
+    };
+  }, [weekDates, telemetryStateTrigger]);
 
   // Dashboard calculations
   const stats = useMemo(() => {
@@ -701,17 +749,7 @@ export const ReviewSession: React.FC = () => {
     });
   };
 
-  // Toggle Tags form
-  const handleOpenTagEditor = (phraseId: string, currentTags: string[] = []) => {
-    setEditingPhraseTagsId(phraseId);
-    setPhraseTagsInput(currentTags.join(', '));
-  };
 
-  const handleSaveTags = (phraseId: string) => {
-    const tags = phraseTagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
-    updatePhraseTags(phraseId, tags);
-    setEditingPhraseTagsId(null);
-  };
 
   // --- Active Review Session View ---
   if (sessionActive) {
@@ -1461,19 +1499,19 @@ export const ReviewSession: React.FC = () => {
               🎯 Praticar Revisão
             </button>
             <button
-              onClick={() => setActiveSubTab('library')}
+              onClick={() => setActiveSubTab('planner')}
               style={{
                 background: 'none',
                 border: 'none',
-                borderBottom: activeSubTab === 'library' ? '2px solid var(--accent)' : 'none',
-                color: activeSubTab === 'library' ? 'white' : 'var(--text-secondary)',
+                borderBottom: activeSubTab === 'planner' ? '2px solid var(--accent)' : 'none',
+                color: activeSubTab === 'planner' ? 'white' : 'var(--text-secondary)',
                 fontWeight: 700,
                 fontSize: '0.92rem',
                 paddingBottom: '8px',
                 cursor: 'pointer'
               }}
             >
-              📚 Biblioteca de Cards ({filteredPhrasesForLibrary.length})
+              📅 Planejamento da Semana
             </button>
           </div>
 
@@ -1832,226 +1870,276 @@ export const ReviewSession: React.FC = () => {
         )}
 
         {/* ======================================= */}
-        {/* TAB 2: LIBRARY / CARD MANAGER VIEW      */}
+        {/* TAB 2: WEEKLY PLANNER VIEW              */}
         {/* ======================================= */}
-        {activeSubTab === 'library' && (
-          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {activeSubTab === 'planner' && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Filters Bar */}
-            <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Header & Week Navigation Controls */}
+            <div className="glass-card" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  📅 Planejamento da Semana
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Organize seus objetivos de estudos e acompanhe sua telemetria diária
+                </span>
+              </div>
               
-              {/* Search & Status Filters */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--text-muted)' }} />
-                  <input
-                    type="text"
-                    className="input-text"
-                    placeholder="Pesquisar por texto, tradução ou tags..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: '100%', paddingLeft: '32px', fontSize: '0.8rem', paddingRight: '10px', height: '34px' }}
-                  />
-                </div>
-
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="input-text"
-                  style={{ width: '130px', fontSize: '0.78rem', height: '34px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  onClick={() => setWeekOffset(prev => prev - 1)}
+                  className="btn-icon"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', gap: '4px' }}
                 >
-                  <option value="all">Sentenças Ativas</option>
-                  <option value="favorites">⭐️ Favoritas</option>
-                  <option value="archived">📦 Arquivadas</option>
-                  <option value="suspended">⏸️ Suspensas</option>
-                </select>
-
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="input-text"
-                  style={{ width: '130px', fontSize: '0.78rem', height: '34px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+                  ◀ Anterior
+                </button>
+                <button 
+                  onClick={() => setWeekOffset(0)}
+                  className="btn-icon"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', fontWeight: 700 }}
                 >
-                  <option value="text">🔤 Ordem Alfabética</option>
-                  <option value="stars">⭐️ Nível de Domínio</option>
-                  <option value="difficulty">🔴 Dificuldade</option>
-                  <option value="next_review">📅 Próxima Revisão</option>
-                </select>
+                  Hoje
+                </button>
+                <button 
+                  onClick={() => setWeekOffset(prev => prev + 1)}
+                  className="btn-icon"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', width: 'auto', height: '34px', gap: '4px' }}
+                >
+                  Próxima ▶
+                </button>
               </div>
-
-              {/* Grouping Filter */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Agrupar por:</span>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'none', label: 'Nenhum' },
-                    { id: 'category', label: 'Ilha (Categoria)' },
-                    { id: 'level', label: 'Nível (Dificuldade)' },
-                    { id: 'tags', label: 'Tags' }
-                  ].map(grp => (
-                    <button
-                      key={grp.id}
-                      onClick={() => setSelectedGrouping(grp.id as any)}
-                      style={{
-                        background: selectedGrouping === grp.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
-                        border: '1px solid var(--border)',
-                        color: selectedGrouping === grp.id ? 'white' : 'var(--text-secondary)',
-                        padding: '4px 10px',
-                        borderRadius: '20px',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {grp.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
             </div>
 
-            {/* Library list mapping */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {filteredPhrasesForLibrary.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0' }}>
-                  Nenhum card atende aos filtros selecionados.
-                </div>
-              ) : (
-                filteredPhrasesForLibrary.map(phrase => {
-                  const item = reviewItems[phrase.id];
-                  const stars = phraseStars[phrase.id] || 0;
-                  const difficulty = item?.difficulty || 'medium';
-                  const isArchived = archivedPhrases.includes(phrase.id);
-                  const isSuspended = suspendedPhrases.includes(phrase.id);
+            {/* Weekly Summary Dashboard Banner */}
+            <div className="weekly-summary-panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Revisões Concluídas</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{weeklySummaryStats.totalCompleted} cards</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Foco nesta semana</span>
+              </div>
+              
+              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tempo de Estudo</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)' }}>
+                  {weeklySummaryStats.totalSeconds >= 60 
+                    ? `${Math.floor(weeklySummaryStats.totalSeconds / 60)}m ${weeklySummaryStats.totalSeconds % 60}s` 
+                    : `${weeklySummaryStats.totalSeconds}s`}
+                </span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Métrica de dedicação</span>
+              </div>
 
-                  return (
-                    <div 
-                      key={phrase.id}
-                      className="glass-card"
-                      style={{ padding: '14px 16px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}
-                    >
-                      {/* Top flags row */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        
-                        {/* Domain (Stars) & Difficulty indicator */}
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <span style={{ display: 'flex', gap: '1px' }}>
-                            {[1,2,3,4,5].map(s => (
-                              <Star key={s} size={11} fill={s <= stars ? '#eab308' : 'none'} stroke={s <= stars ? '#eab308' : 'var(--text-muted)'} />
-                            ))}
-                          </span>
+              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Aproveitamento Médio</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#eab308' }}>{weeklySummaryStats.avgSuccessRate}%</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Taxa de acertos</span>
+              </div>
 
-                          <span style={{
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            background: difficulty === 'easy' ? 'rgba(16,185,129,0.1)' : difficulty === 'hard' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
-                            color: difficulty === 'easy' ? 'var(--success)' : difficulty === 'hard' ? '#ef4444' : 'var(--accent)',
-                            textTransform: 'uppercase'
-                          }}>
-                            {difficulty === 'easy' ? 'Fácil' : difficulty === 'hard' ? 'Difícil' : 'Médio'}
-                          </span>
-                        </div>
+              <div className="glass-card" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Idioma em Estudo</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{getLanguageName(targetLanguage)}</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ativo para revisão</span>
+              </div>
+            </div>
 
-                        {/* Flags actions */}
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            onClick={() => toggleArchivePhrase(phrase.id)}
-                            style={{ 
-                              background: isArchived ? 'rgba(234, 179, 8, 0.1)' : 'none', 
-                              border: 'none', 
-                              color: isArchived ? '#eab308' : 'var(--text-muted)', 
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '0.68rem',
-                              fontWeight: 700
-                            }}
-                            title={isArchived ? 'Desarquivar card' : 'Arquivar card'}
-                          >
-                            <Archive size={12} /> {isArchived ? 'Arquivado' : 'Arquivar'}
-                          </button>
-
-                          <button
-                            onClick={() => toggleSuspendPhrase(phrase.id)}
-                            style={{ 
-                              background: isSuspended ? 'rgba(239, 68, 68, 0.1)' : 'none', 
-                              border: 'none', 
-                              color: isSuspended ? '#ef4444' : 'var(--text-muted)', 
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '0.68rem',
-                              fontWeight: 700
-                            }}
-                            title={isSuspended ? 'Retomar card' : 'Suspender card'}
-                          >
-                            <ShieldAlert size={12} /> {isSuspended ? 'Suspenso' : 'Suspender'}
-                          </button>
-
-                          <button
-                            onClick={() => toggleFavorite(phrase.id)}
-                            style={{ background: 'none', border: 'none', color: favorites.includes(phrase.id) ? '#eab308' : 'var(--text-muted)', cursor: 'pointer' }}
-                          >
-                            <Star size={14} fill={favorites.includes(phrase.id) ? '#eab308' : 'none'} />
-                          </button>
-                        </div>
+            {/* 7-Day Weekly Grid Container */}
+            <div className="weekly-planner-grid">
+              {weekDates.map((date) => {
+                const dateKey = formatDateKey(date);
+                const dayName = date.toLocaleDateString('pt-BR', { weekday: 'long' });
+                const dayNameCap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+                const dateDisplay = date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+                
+                const isToday = formatDateKey(new Date()) === dateKey;
+                const scheduled = getScheduledCountForDay(date);
+                const { completed, totalSeconds: daySec, successRate } = getTelemetryStatsForDay(dateKey);
+                
+                const notes = plannerNotes[dateKey] || '';
+                const tasks = plannerTasks[dateKey] || [];
+                const taskInput = taskInputs[dateKey] || '';
+                
+                return (
+                  <div 
+                    key={dateKey} 
+                    className="glass-card" 
+                    style={{ 
+                      padding: '12px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: '12px',
+                      border: isToday ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      boxShadow: isToday ? '0 0 12px rgba(139, 92, 246, 0.15)' : 'none',
+                      background: isToday ? 'rgba(139, 92, 246, 0.02)' : 'rgba(255, 255, 255, 0.01)'
+                    }}
+                  >
+                    {/* Day Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: isToday ? 'var(--accent)' : 'white' }}>
+                          {dayNameCap.split('-')[0]}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{dateDisplay}</span>
                       </div>
+                      {isToday && (
+                        <span style={{ fontSize: '0.58rem', background: 'var(--accent)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontWeight: 800 }}>
+                          HOJE
+                        </span>
+                      )}
+                    </div>
 
-                      {/* Main text and translation */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
-                        <div>
-                          <strong style={{ fontSize: '0.92rem', color: 'white', display: 'block' }}>{phrase.text}</strong>
-                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block', marginTop: '2px' }}>{phrase.translation}</span>
-                        </div>
-                        
-                        <button
-                          onClick={() => playPhraseAudio(phrase)}
-                          className="btn-icon"
-                          style={{ width: '28px', height: '28px', flexShrink: 0 }}
-                        >
-                          <Volume2 size={13} />
-                        </button>
+                    {/* Stats Dashboard for the Day */}
+                    <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', padding: '6px 8px', fontSize: '0.7rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Agendados:</span>
+                        <span style={{ fontWeight: 700, color: 'white' }}>{scheduled}</span>
                       </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Completados:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--success)' }}>{completed}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Estudo:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
+                          {daySec >= 60 ? `${Math.floor(daySec / 60)}m` : `${daySec}s`}
+                        </span>
+                      </div>
+                      {completed > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '3px', marginTop: '2px' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>Aproveitamento:</span>
+                          <span style={{ fontWeight: 700, color: '#eab308' }}>{successRate}%</span>
+                        </div>
+                      )}
+                    </div>
 
-                      {/* Tags row */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.02)', paddingTop: '6px', marginTop: '4px' }}>
-                        <Tag size={10} style={{ color: 'var(--text-muted)' }} />
-                        {phrase.tags && phrase.tags.map((tag, idx) => (
-                          <span key={idx} style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.62rem', padding: '2px 6px', borderRadius: '4px' }}>
-                            {tag}
-                          </span>
-                        ))}
-                        
-                        {editingPhraseTagsId === phrase.id ? (
-                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            <input
-                              type="text"
-                              value={phraseTagsInput}
-                              onChange={(e) => setPhraseTagsInput(e.target.value)}
-                              placeholder="ex: verbo, giria"
-                              style={{ padding: '2px 4px', fontSize: '0.62rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '3px', color: 'white' }}
-                              autoFocus
-                            />
-                            <button onClick={() => handleSaveTags(phrase.id)} style={{ background: 'var(--success)', border: 'none', color: 'white', padding: '2px 6px', fontSize: '0.62rem', borderRadius: '3px', cursor: 'pointer' }}>OK</button>
-                          </div>
+                    {/* Annotations/Notes */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estudo & Insights</span>
+                      <textarea
+                        className="input-text"
+                        placeholder="Objetivos de hoje..."
+                        value={notes}
+                        onChange={(e) => {
+                          const updated = { ...plannerNotes, [dateKey]: e.target.value };
+                          setPlannerNotes(updated);
+                          localStorage.setItem('hl_weekly_planner_notes', JSON.stringify(updated));
+                        }}
+                        style={{ 
+                          width: '100%', 
+                          minHeight: '60px', 
+                          fontSize: '0.72rem', 
+                          padding: '6px', 
+                          background: 'rgba(255,255,255,0.01)', 
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          borderRadius: '4px',
+                          color: 'white',
+                          resize: 'vertical',
+                          lineHeight: 1.3
+                        }}
+                      />
+                    </div>
+
+                    {/* Task Checklist */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tarefas</span>
+                      
+                      {/* Task items list */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
+                        {tasks.length === 0 ? (
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma tarefa.</span>
                         ) : (
-                          <button
-                            onClick={() => handleOpenTagEditor(phrase.id, phrase.tags)}
-                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.62rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
-                          >
-                            + Tag
-                          </button>
+                          tasks.map(task => (
+                            <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', background: 'rgba(255,255,255,0.02)', padding: '4px 6px', borderRadius: '4px' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', cursor: 'pointer', flex: 1, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text-muted)' : 'white' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={task.done}
+                                  onChange={() => {
+                                    const updatedTasks = tasks.map(t => t.id === task.id ? { ...t, done: !t.done } : t);
+                                    const updated = { ...plannerTasks, [dateKey]: updatedTasks };
+                                    setPlannerTasks(updated);
+                                    localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                                {task.text}
+                              </label>
+                              <button 
+                                onClick={() => {
+                                  const updatedTasks = tasks.filter(t => t.id !== task.id);
+                                  const updated = { ...plannerTasks, [dateKey]: updatedTasks };
+                                  setPlannerTasks(updated);
+                                  localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                                }}
+                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+                                title="Excluir tarefa"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ))
                         )}
                       </div>
+
+                      {/* Add task input */}
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!taskInput.trim()) return;
+                          const currentTasks = plannerTasks[dateKey] || [];
+                          const updated = { 
+                            ...plannerTasks, 
+                            [dateKey]: [...currentTasks, { id: Math.random().toString(36).slice(2, 9), text: taskInput.trim(), done: false }]
+                          };
+                          setPlannerTasks(updated);
+                          localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                          
+                          setTaskInputs(prev => ({ ...prev, [dateKey]: '' }));
+                        }}
+                        style={{ display: 'flex', gap: '4px', marginTop: '2px' }}
+                      >
+                        <input
+                          type="text"
+                          placeholder="Nova tarefa..."
+                          value={taskInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTaskInputs(prev => ({ ...prev, [dateKey]: val }));
+                          }}
+                          style={{ 
+                            flex: 1, 
+                            fontSize: '0.68rem', 
+                            padding: '4px 6px', 
+                            background: 'var(--bg-secondary)', 
+                            border: '1px solid var(--border)', 
+                            borderRadius: '4px',
+                            color: 'white',
+                            height: '24px'
+                          }}
+                        />
+                        <button 
+                          type="submit"
+                          style={{ 
+                            background: 'var(--accent)', 
+                            border: 'none', 
+                            color: 'white', 
+                            fontSize: '0.8rem', 
+                            padding: '0 8px', 
+                            borderRadius: '4px', 
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '24px'
+                          }}
+                        >
+                          +
+                        </button>
+                      </form>
                     </div>
-                  );
-                })
-              )}
+
+                  </div>
+                );
+              })}
             </div>
 
           </div>

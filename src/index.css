@@ -1823,6 +1823,33 @@ button, input, textarea, select {
   }
 }
 
+/* Weekly Planner Grid */
+.weekly-planner-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+@media (max-width: 1200px) {
+  .weekly-planner-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .weekly-planner-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .weekly-planner-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 
 
