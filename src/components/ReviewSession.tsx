@@ -123,6 +123,7 @@ export const ReviewSession: React.FC = () => {
   const [plannerFontSize, setPlannerFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [showCountdowns, setShowCountdowns] = useState<boolean>(true);
   const [showSidebarWeeks, setShowSidebarWeeks] = useState<boolean>(false);
+  const [showPlannerSettings, setShowPlannerSettings] = useState<boolean>(false);
   
   // Custom countdowns
   const [customCountdowns, setCustomCountdowns] = useState<{ id: string; title: string; targetDate: string }[]>(() => {
@@ -2005,6 +2006,8 @@ export const ReviewSession: React.FC = () => {
             
             {/* Header & Advanced Settings Toolbar */}
             <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              {/* Row 1: Title & Pagination / Settings Icon Toggle */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
@@ -2015,7 +2018,7 @@ export const ReviewSession: React.FC = () => {
                   </span>
                 </div>
                 
-                {/* Week/Month pagination */}
+                {/* Week/Month pagination & Settings button */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button 
                     onClick={() => setWeekOffset(prev => prev - 1)}
@@ -2038,13 +2041,32 @@ export const ReviewSession: React.FC = () => {
                   >
                     Próxima ▶
                   </button>
+
+                  <button 
+                    onClick={() => setShowPlannerSettings(!showPlannerSettings)}
+                    style={{
+                      padding: '6px',
+                      width: '34px',
+                      height: '34px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: showPlannerSettings ? 'var(--accent)' : 'rgba(255, 255, 255, 0.03)',
+                      color: showPlannerSettings ? 'white' : 'var(--text-muted)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    title="Configurações do Planejador"
+                  >
+                    <Settings size={16} />
+                  </button>
                 </div>
               </div>
 
-              {/* Advanced Controls Bar */}
+              {/* Row 2: Clean View switcher */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                
-                {/* View mode switcher */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Visualização:</span>
                   <div style={{ display: 'flex', gap: '4px' }}>
@@ -2076,97 +2098,106 @@ export const ReviewSession: React.FC = () => {
                     ))}
                   </div>
                 </div>
+              </div>
 
-                {/* Font Size Selector */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tamanho Fonte:</span>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    {([
-                      { id: 'normal', label: 'A' },
-                      { id: 'large', label: 'A+' },
-                      { id: 'xlarge', label: 'A++' }
-                    ] as const).map(sz => (
-                      <button
-                        key={sz.id}
-                        onClick={() => setPlannerFontSize(sz.id)}
-                        style={{
-                          background: plannerFontSize === sz.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
-                          border: '1px solid var(--border)',
-                          color: plannerFontSize === sz.id ? 'white' : 'var(--text-secondary)',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.7rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          minWidth: '28px'
-                        }}
-                      >
-                        {sz.label}
-                      </button>
-                    ))}
+              {/* Collapsible Advanced Settings panel */}
+              {showPlannerSettings && (
+                <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', background: 'rgba(0,0,0,0.1)', padding: '12px', borderRadius: '6px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    
+                    {/* Font Size Selector */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tamanho Fonte:</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {([
+                          { id: 'normal', label: 'A' },
+                          { id: 'large', label: 'A+' },
+                          { id: 'xlarge', label: 'A++' }
+                        ] as const).map(sz => (
+                          <button
+                            key={sz.id}
+                            onClick={() => setPlannerFontSize(sz.id)}
+                            style={{
+                              background: plannerFontSize === sz.id ? 'var(--accent)' : 'rgba(255,255,255,0.02)',
+                              border: '1px solid var(--border)',
+                              color: plannerFontSize === sz.id ? 'white' : 'var(--text-secondary)',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              minWidth: '28px'
+                            }}
+                          >
+                            {sz.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Countdown and Chronology toggles */}
+                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox"
+                          checked={showCountdowns}
+                          onChange={(e) => setShowCountdowns(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        Mostrar Cronômetros (Sidebar)
+                      </label>
+                      
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                        <input 
+                          type="checkbox"
+                          checked={showSidebarWeeks}
+                          onChange={(e) => setShowSidebarWeeks(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        Ver Cronologia (Sidebar)
+                      </label>
+                    </div>
+
                   </div>
-                </div>
 
-                {/* Countdown and Chronology toggles */}
-                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox"
-                      checked={showCountdowns}
-                      onChange={(e) => setShowCountdowns(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
+                  {/* Add Custom Countdown Form inside Advanced Bar */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', width: '100%' }}>
+                      ➕ Adicionar Cronômetro Regressivo de Meta
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Título da meta (ex: Exame de Proficiência)"
+                      className="input-text"
+                      value={newCountdownTitle}
+                      onChange={(e) => setNewCountdownTitle(e.target.value)}
+                      style={{ flex: 2, minWidth: '180px', fontSize: '0.75rem', height: '28px' }}
                     />
-                    Mostrar Cronômetros (Sidebar)
-                  </label>
-                  
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox"
-                      checked={showSidebarWeeks}
-                      onChange={(e) => setShowSidebarWeeks(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
+                    <input
+                      type="date"
+                      className="input-text"
+                      value={newCountdownDate}
+                      onChange={(e) => setNewCountdownDate(e.target.value)}
+                      style={{ flex: 1, minWidth: '120px', fontSize: '0.75rem', height: '28px' }}
                     />
-                    Ver Cronologia (Sidebar)
-                  </label>
+                    <button
+                      onClick={() => {
+                        if (!newCountdownTitle.trim() || !newCountdownDate) return;
+                        const nextCd = [...customCountdowns, { id: Math.random().toString(36).slice(2, 9), title: newCountdownTitle.trim(), targetDate: newCountdownDate }];
+                        setCustomCountdowns(nextCd);
+                        localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                        setNewCountdownTitle('');
+                        setNewCountdownDate('');
+                      }}
+                      className="btn btn-primary"
+                      style={{ padding: '0 12px', fontSize: '0.75rem', height: '28px', borderRadius: '4px' }}
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+
                 </div>
-
-              </div>
-
-              {/* Add Custom Countdown Form inside Advanced Bar */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '10px' }}>
-                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', width: '100%' }}>
-                  ➕ Adicionar Cronômetro Regressivo de Meta
-                </span>
-                <input
-                  type="text"
-                  placeholder="Título da meta (ex: Exame de Proficiência)"
-                  className="input-text"
-                  value={newCountdownTitle}
-                  onChange={(e) => setNewCountdownTitle(e.target.value)}
-                  style={{ flex: 2, minWidth: '180px', fontSize: '0.75rem', height: '28px' }}
-                />
-                <input
-                  type="date"
-                  className="input-text"
-                  value={newCountdownDate}
-                  onChange={(e) => setNewCountdownDate(e.target.value)}
-                  style={{ flex: 1, minWidth: '120px', fontSize: '0.75rem', height: '28px' }}
-                />
-                <button
-                  onClick={() => {
-                    if (!newCountdownTitle.trim() || !newCountdownDate) return;
-                    const nextCd = [...customCountdowns, { id: Math.random().toString(36).slice(2, 9), title: newCountdownTitle.trim(), targetDate: newCountdownDate }];
-                    setCustomCountdowns(nextCd);
-                    localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
-                    setNewCountdownTitle('');
-                    setNewCountdownDate('');
-                  }}
-                  className="btn btn-primary"
-                  style={{ padding: '0 12px', fontSize: '0.75rem', height: '28px', borderRadius: '4px' }}
-                >
-                  Adicionar
-                </button>
-              </div>
+              )}
 
             </div>
 
@@ -2767,39 +2798,46 @@ export const ReviewSession: React.FC = () => {
           {/* PLANNER ONLY: COUNTDOWN TIMERS          */}
           {/* ======================================= */}
           {activeSubTab === 'planner' && showCountdowns && (
-            <div className="fade-in" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                ⏱️ Contagem Regressiva (Dias)
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                ⏱️ Cronômetros Regressivos (Metas)
               </span>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Fim do Ano:</span>
-                  <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getYearCountdown()}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Year countdown card */}
+                <div className="glass-card" style={{ padding: '12px 14px', borderLeft: '3px solid var(--accent)', display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(255,255,255,0.01)' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Fim do Ano ({new Date().getFullYear()})</span>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 900, color: 'white', fontFamily: 'monospace', lineHeight: 1.1, marginTop: '2px' }}>{getYearCountdown()}</span>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Fim do Trimestre:</span>
-                  <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getQuarterCountdown()}</span>
+                {/* Quarter countdown card */}
+                <div className="glass-card" style={{ padding: '12px 14px', borderLeft: '3px solid #eab308', display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(255,255,255,0.01)' }}>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Fim do Trimestre Ativo</span>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 900, color: 'white', fontFamily: 'monospace', lineHeight: 1.1, marginTop: '2px' }}>{getQuarterCountdown()}</span>
                 </div>
 
+                {/* Custom countdowns mapping */}
                 {customCountdowns.map(cd => (
-                  <div key={cd.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '6px 8px', borderRadius: '4px', position: 'relative' }}>
-                    <span style={{ color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100px' }} title={cd.title}>{cd.title}:</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontWeight: 800, color: 'white', fontFamily: 'monospace' }}>{getCustomCountdown(cd.targetDate)}</span>
-                      <button
-                        onClick={() => {
-                          const nextCd = customCountdowns.filter(c => c.id !== cd.id);
-                          setCustomCountdowns(nextCd);
-                          localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
-                        }}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}
-                        title="Remover"
-                      >
-                        &times;
-                      </button>
-                    </div>
+                  <div 
+                    key={cd.id} 
+                    className="glass-card" 
+                    style={{ padding: '12px 14px', borderLeft: '3px solid var(--success)', display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(255,255,255,0.01)', position: 'relative' }}
+                  >
+                    <button
+                      onClick={() => {
+                        const nextCd = customCountdowns.filter(c => c.id !== cd.id);
+                        setCustomCountdowns(nextCd);
+                        localStorage.setItem('hl_custom_countdowns', JSON.stringify(nextCd));
+                      }}
+                      style={{ position: 'absolute', right: '8px', top: '8px', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}
+                      title="Excluir meta"
+                    >
+                      &times;
+                    </button>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: '12px' }} title={cd.title}>
+                      🎯 {cd.title}
+                    </span>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 900, color: 'white', fontFamily: 'monospace', lineHeight: 1.1, marginTop: '2px' }}>{getCustomCountdown(cd.targetDate)}</span>
                   </div>
                 ))}
               </div>
