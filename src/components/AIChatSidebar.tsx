@@ -412,7 +412,7 @@ export const AIChatSidebar: React.FC = () => {
     try {
       const url = '/nvidia-proxy/v1/chat/completions';
       const langName = activeLang.name;
-      const systemPrompt = `Você é o Assistente de Idiomas especialista do LearnChunk. Seu objetivo principal é guiar o usuário no aprendizado do idioma ${langName}. 
+      const systemPrompt = `Você é o Assistente de Idiomas especialista do LearnChunks. Seu objetivo principal é guiar o usuário no aprendizado do idioma ${langName}. 
 Regras:
 1. Responda de forma concisa, direta e muito amigável.
 2. Forneça explicações gramaticais claras com exemplos originais formatados em markdown.
@@ -496,7 +496,7 @@ Regras:
 
     setImportOriginal(cleanText);
     setImportTranslation('');
-    setImportExplanation(`Gerado no Chat de IA do LearnChunk. Contexto original:\n"${msg.content.substring(0, 300)}..."`);
+    setImportExplanation(`Gerado no Chat de IA do LearnChunks. Contexto original:\n"${msg.content.substring(0, 300)}..."`);
     setIsCreatingCategory(false);
     setNewCatName('');
     setNewCatDesc('');

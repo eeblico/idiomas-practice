@@ -138,7 +138,7 @@ const MainAppContent: React.FC = () => {
           
           <h1 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Square size={16} style={{ fill: 'var(--accent)', stroke: 'none' }} />
-            <span>Learn<span style={{ color: 'var(--accent)' }}>Chunk</span></span>
+            <span>Learn<span style={{ color: 'var(--accent)' }}>Chunks</span></span>
           </h1>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
