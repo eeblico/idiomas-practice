@@ -124,6 +124,7 @@ export const ReviewSession: React.FC = () => {
   const [showCountdowns, setShowCountdowns] = useState<boolean>(true);
   const [showSidebarWeeks, setShowSidebarWeeks] = useState<boolean>(false);
   const [showPlannerSettings, setShowPlannerSettings] = useState<boolean>(false);
+  const [activeCardTabs, setActiveCardTabs] = useState<Record<string, 'notes' | 'tasks'>>({});
   
   // Custom countdowns
   const [customCountdowns, setCustomCountdowns] = useState<{ id: string; title: string; targetDate: string }[]>(() => {
@@ -2236,13 +2237,7 @@ export const ReviewSession: React.FC = () => {
 
               {/* 5. CALENDAR VIEW GRIDS */}
               {plannerViewMode !== '1year' && (
-                <div 
-                  className="weekly-planner-grid" 
-                  style={{
-                    gridTemplateColumns: plannerViewMode === '3days' ? 'repeat(3, 1fr)' : plannerViewMode === '1month' ? 'repeat(7, 1fr)' : 'repeat(7, 1fr)',
-                    gap: '10px'
-                  }}
-                >
+                <div className={`weekly-planner-grid view-${plannerViewMode}`}>
                   {activeDates.map((date) => {
                     const dateKey = formatDateKey(date);
                     const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
@@ -2251,21 +2246,22 @@ export const ReviewSession: React.FC = () => {
                     
                     const isToday = formatDateKey(new Date()) === dateKey;
                     const scheduled = getScheduledCountForDay(date);
-                    const { completed, totalSeconds: daySec, successRate } = getTelemetryStatsForDay(dateKey);
+                    const { completed, totalSeconds: daySec } = getTelemetryStatsForDay(dateKey);
                     
                     const notes = plannerNotes[dateKey] || '';
                     const tasks = plannerTasks[dateKey] || [];
                     const taskInput = taskInputs[dateKey] || '';
+                    const currentTab = activeCardTabs[dateKey] || 'notes';
                     
                     return (
                       <div 
                         key={dateKey} 
-                        className="glass-card" 
+                        className="glass-card planner-day-card" 
                         style={{ 
-                          padding: plannerViewMode === '1month' ? '8px' : '12px', 
+                          padding: '12px', 
                           display: 'flex', 
                           flexDirection: 'column', 
-                          gap: plannerViewMode === '1month' ? '6px' : '12px',
+                          gap: '10px',
                           border: isToday ? '1px solid var(--accent)' : '1px solid var(--border)',
                           boxShadow: isToday ? '0 0 12px rgba(139, 92, 246, 0.15)' : 'none',
                           background: isToday ? 'rgba(139, 92, 246, 0.02)' : 'rgba(255, 255, 255, 0.01)',
@@ -2275,77 +2271,152 @@ export const ReviewSession: React.FC = () => {
                         {/* Day Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: isToday ? 'var(--accent)' : 'white' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: isToday ? 'var(--accent)' : 'white' }}>
                               {dayNameCap.split('.')[0]}
                             </span>
                             <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{dateDisplay}</span>
                           </div>
                           {isToday && (
-                            <span style={{ fontSize: '0.52rem', background: 'var(--accent)', color: 'white', padding: '1px 4px', borderRadius: '4px', fontWeight: 800 }}>
+                            <span style={{ fontSize: '0.52rem', background: 'var(--accent)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
                               HOJE
                             </span>
                           )}
                         </div>
 
-                        {/* Stats Dashboard for the Day */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '6px', padding: '4px 6px', fontSize: '0.65rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Agendados:</span>
-                            <span style={{ fontWeight: 700, color: 'white' }}>{scheduled}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Feitos:</span>
-                            <span style={{ fontWeight: 700, color: 'var(--success)' }}>{completed}</span>
-                          </div>
-                          {plannerViewMode !== '1month' && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: 'var(--text-muted)' }}>Tempo:</span>
-                              <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
-                                {daySec >= 60 ? `${Math.floor(daySec / 60)}m` : `${daySec}s`}
-                              </span>
-                            </div>
-                          )}
+                        {/* Compact Stats Dashboard for the Day */}
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-around', 
+                          background: 'rgba(255, 255, 255, 0.02)', 
+                          padding: '4px 6px', 
+                          borderRadius: '6px', 
+                          fontSize: '0.68rem',
+                          border: '1px solid rgba(255, 255, 255, 0.03)'
+                        }}>
+                          <span title="Cards Agendados" style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            📚 <strong>{scheduled}</strong>
+                          </span>
+                          <span title="Revisões Concluídas" style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            ✅ <strong>{completed}</strong>
+                          </span>
+                          <span title="Tempo de Estudo" style={{ color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            ⏱️ <strong>{daySec >= 60 ? `${Math.floor(daySec / 60)}m` : `${daySec}s`}</strong>
+                          </span>
                         </div>
 
-                        {/* Annotations/Notes */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {plannerViewMode !== '1month' && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estudo & Insights</span>}
-                          <textarea
-                            className="input-text"
-                            placeholder={plannerViewMode === '1month' ? 'Notas...' : 'Estudo & Insights...'}
-                            value={notes}
-                            onChange={(e) => {
-                              const updated = { ...plannerNotes, [dateKey]: e.target.value };
-                              setPlannerNotes(updated);
-                              localStorage.setItem('hl_weekly_planner_notes', JSON.stringify(updated));
+                        {/* Card Tabs Switcher */}
+                        <div style={{ 
+                          display: 'flex', 
+                          background: 'rgba(0, 0, 0, 0.15)', 
+                          padding: '2px', 
+                          borderRadius: '4px', 
+                          gap: '2px' 
+                        }}>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCardTabs(prev => ({ ...prev, [dateKey]: 'notes' }))}
+                            style={{
+                              flex: 1,
+                              padding: '4px 2px',
+                              fontSize: '0.62rem',
+                              fontWeight: currentTab === 'notes' ? 700 : 500,
+                              color: currentTab === 'notes' ? 'white' : 'var(--text-muted)',
+                              background: currentTab === 'notes' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                              border: 'none',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
                             }}
-                            style={{ 
-                              width: '100%', 
-                              minHeight: plannerViewMode === '1month' ? '40px' : '60px', 
-                              fontSize: '0.68rem', 
-                              padding: '4px', 
-                              background: 'rgba(255,255,255,0.01)', 
-                              border: '1px solid rgba(255,255,255,0.05)',
-                              borderRadius: '4px',
-                              color: 'white',
-                              resize: 'vertical',
-                              lineHeight: 1.25
+                          >
+                            📝 Notas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCardTabs(prev => ({ ...prev, [dateKey]: 'tasks' }))}
+                            style={{
+                              flex: 1,
+                              padding: '4px 2px',
+                              fontSize: '0.62rem',
+                              fontWeight: currentTab === 'tasks' ? 700 : 500,
+                              color: currentTab === 'tasks' ? 'white' : 'var(--text-muted)',
+                              background: currentTab === 'tasks' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                              border: 'none',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
                             }}
-                          />
+                          >
+                            📋 Tarefas {tasks.length > 0 && `(${tasks.filter(t => !t.done).length})`}
+                          </button>
                         </div>
 
-                        {/* Task Checklist */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {plannerViewMode !== '1month' && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Tarefas</span>}
-                          
-                          {plannerViewMode !== '1month' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '110px', overflowY: 'auto' }}>
+                        {/* Tab Content: Annotations/Notes */}
+                        {currentTab === 'notes' && (
+                          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <textarea
+                              className="input-text"
+                              placeholder="Anotações, insights de estudo ou vocabulário..."
+                              value={notes}
+                              onChange={(e) => {
+                                const updated = { ...plannerNotes, [dateKey]: e.target.value };
+                                setPlannerNotes(updated);
+                                localStorage.setItem('hl_weekly_planner_notes', JSON.stringify(updated));
+                              }}
+                              style={{ 
+                                width: '100%', 
+                                minHeight: '80px', 
+                                fontSize: '0.68rem', 
+                                padding: '6px', 
+                                background: 'rgba(0,0,0,0.1)', 
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: '4px',
+                                color: 'white',
+                                resize: 'vertical',
+                                lineHeight: 1.3
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Tab Content: Task Checklist */}
+                        {currentTab === 'tasks' && (
+                          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '4px', 
+                              maxHeight: '120px', 
+                              overflowY: 'auto',
+                              paddingRight: '2px'
+                            }}>
                               {tasks.length === 0 ? (
-                                <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma tarefa.</span>
+                                <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>Nenhuma tarefa.</span>
                               ) : (
                                 tasks.map(task => (
-                                  <div key={task.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', background: 'rgba(255,255,255,0.02)', padding: '3px 4px', borderRadius: '4px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', cursor: 'pointer', flex: 1, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text-muted)' : 'white' }}>
+                                  <div 
+                                    key={task.id} 
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'space-between', 
+                                      gap: '6px', 
+                                      background: 'rgba(255,255,255,0.02)', 
+                                      padding: '4px 6px', 
+                                      borderRadius: '4px',
+                                      border: '1px solid rgba(255,255,255,0.01)'
+                                    }}
+                                  >
+                                    <label style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '6px', 
+                                      fontSize: '0.65rem', 
+                                      cursor: 'pointer', 
+                                      flex: 1, 
+                                      minWidth: 0,
+                                      textDecoration: task.done ? 'line-through' : 'none', 
+                                      color: task.done ? 'var(--text-muted)' : 'white' 
+                                    }}>
                                       <input 
                                         type="checkbox"
                                         checked={task.done}
@@ -2355,18 +2426,26 @@ export const ReviewSession: React.FC = () => {
                                           setPlannerTasks(updated);
                                           localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
                                         }}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: 'pointer', flexShrink: 0 }}
                                       />
-                                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80px' }}>{task.text}</span>
+                                      <span style={{ 
+                                        textOverflow: 'ellipsis', 
+                                        overflow: 'hidden', 
+                                        whiteSpace: 'nowrap', 
+                                        width: '100%' 
+                                      }} title={task.text}>
+                                        {task.text}
+                                      </span>
                                     </label>
                                     <button 
+                                      type="button"
                                       onClick={() => {
                                         const updatedTasks = tasks.filter(t => t.id !== task.id);
                                         const updated = { ...plannerTasks, [dateKey]: updatedTasks };
                                         setPlannerTasks(updated);
                                         localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
                                       }}
-                                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}
+                                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px', flexShrink: 0 }}
                                     >
                                       &times;
                                     </button>
@@ -2374,61 +2453,63 @@ export const ReviewSession: React.FC = () => {
                                 ))
                               )}
                             </div>
-                          )}
 
-                          {/* Add task input */}
-                          <form 
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              if (!taskInput.trim()) return;
-                              const currentTasks = plannerTasks[dateKey] || [];
-                              const updated = { 
-                                ...plannerTasks, 
-                                [dateKey]: [...currentTasks, { id: Math.random().toString(36).slice(2, 9), text: taskInput.trim(), done: false }]
-                              };
-                              setPlannerTasks(updated);
-                              localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
-                              setTaskInputs(prev => ({ ...prev, [dateKey]: '' }));
-                            }}
-                            style={{ display: 'flex', gap: '2px', marginTop: '2px' }}
-                          >
-                            <input
-                              type="text"
-                              placeholder={plannerViewMode === '1month' ? '+' : 'Tarefa...'}
-                              value={taskInput}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setTaskInputs(prev => ({ ...prev, [dateKey]: val }));
+                            {/* Add task form */}
+                            <form 
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                if (!taskInput.trim()) return;
+                                const currentTasks = plannerTasks[dateKey] || [];
+                                const updated = { 
+                                  ...plannerTasks, 
+                                  [dateKey]: [...currentTasks, { id: Math.random().toString(36).slice(2, 9), text: taskInput.trim(), done: false }]
+                                };
+                                setPlannerTasks(updated);
+                                localStorage.setItem('hl_weekly_planner_tasks', JSON.stringify(updated));
+                                setTaskInputs(prev => ({ ...prev, [dateKey]: '' }));
                               }}
-                              style={{ 
-                                flex: 1, 
-                                fontSize: '0.62rem', 
-                                padding: '2px 4px', 
-                                background: 'var(--bg-secondary)', 
-                                border: '1px solid var(--border)', 
-                                borderRadius: '4px',
-                                color: 'white',
-                                height: '22px'
-                              }}
-                            />
-                            <button 
-                              type="submit"
-                              style={{ 
-                                background: 'var(--accent)', 
-                                border: 'none', 
-                                color: 'white', 
-                                fontSize: '0.75rem', 
-                                padding: '0 6px', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer',
-                                height: '22px'
-                              }}
+                              style={{ display: 'flex', gap: '3px', marginTop: '2px' }}
                             >
-                              +
-                            </button>
-                          </form>
-                        </div>
-
+                              <input
+                                type="text"
+                                placeholder="Nova tarefa..."
+                                value={taskInput}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setTaskInputs(prev => ({ ...prev, [dateKey]: val }));
+                                }}
+                                style={{ 
+                                  flex: 1, 
+                                  fontSize: '0.65rem', 
+                                  padding: '4px 6px', 
+                                  background: 'var(--bg-secondary)', 
+                                  border: '1px solid var(--border)', 
+                                  borderRadius: '4px',
+                                  color: 'white',
+                                  height: '24px',
+                                  minWidth: 0
+                                }}
+                              />
+                              <button 
+                                type="submit"
+                                style={{ 
+                                  background: 'var(--accent)', 
+                                  border: 'none', 
+                                  color: 'white', 
+                                  fontSize: '0.75rem', 
+                                  padding: '0 8px', 
+                                  borderRadius: '4px', 
+                                  cursor: 'pointer',
+                                  height: '24px',
+                                  fontWeight: 'bold',
+                                  flexShrink: 0
+                                }}
+                              >
+                                +
+                              </button>
+                            </form>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

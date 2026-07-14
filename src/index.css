@@ -1826,28 +1826,74 @@ button, input, textarea, select {
 /* Weekly Planner Grid */
 .weekly-planner-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
-@media (max-width: 1200px) {
-  .weekly-planner-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+/* 3 Days View Layout */
+.weekly-planner-grid.view-3days {
+  grid-template-columns: repeat(3, 1fr);
 }
-
-@media (max-width: 768px) {
-  .weekly-planner-grid {
+@media (max-width: 900px) {
+  .weekly-planner-grid.view-3days {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-
-@media (max-width: 480px) {
-  .weekly-planner-grid {
+@media (max-width: 600px) {
+  .weekly-planner-grid.view-3days {
     grid-template-columns: 1fr;
   }
+}
+
+/* 1 Week View Layout */
+.weekly-planner-grid.view-1week {
+  grid-template-columns: repeat(7, 1fr);
+}
+@media (max-width: 1450px) {
+  .weekly-planner-grid.view-1week {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 950px) {
+  .weekly-planner-grid.view-1week {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .weekly-planner-grid.view-1week {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 1 Month View Layout */
+.weekly-planner-grid.view-1month {
+  grid-template-columns: repeat(7, 1fr);
+}
+@media (max-width: 1200px) {
+  .weekly-planner-grid.view-1month {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 800px) {
+  .weekly-planner-grid.view-1month {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 500px) {
+  .weekly-planner-grid.view-1month {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Day card enhancements */
+.planner-day-card {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.planner-day-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Font Scaling Utilities for Planner */
