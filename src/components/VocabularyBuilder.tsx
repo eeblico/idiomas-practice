@@ -17,7 +17,8 @@ import {
   Award,
   BookMarked,
   ArrowLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 
 interface SheetWord {
@@ -34,6 +35,23 @@ interface SheetIsland {
   words: SheetWord[];
 }
 
+interface Subgroup {
+  id: string;
+  circleLabel?: string;
+  title: string;
+  description: string;
+  isStandalone?: boolean;
+  sheetId?: string;
+  islandIds?: string[];
+}
+
+interface GroupDefinition {
+  id: string;
+  name: string;
+  dotColor: string;
+  subgroups: Subgroup[];
+}
+
 export const VocabularyBuilder: React.FC = () => {
   const { 
     targetLanguage, 
@@ -45,6 +63,9 @@ export const VocabularyBuilder: React.FC = () => {
 
   // Active selected vocabulary island (null means catalog view)
   const [activeIslandId, setActiveIslandId] = useState<string | null>(null);
+
+  // Accordion collapsed state for subgroups (true means collapsed)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   // Custom words added by the user
   const [customWords, setCustomWords] = useState<VocabularyWord[]>(() => {
@@ -69,11 +90,11 @@ export const VocabularyBuilder: React.FC = () => {
   // Toggled state for revealing translations per card
   const [revealedCardIds, setRevealedCardIds] = useState<Record<string, boolean>>({});
 
-  // Search query inside the active island
+  // Search and filter inside selected island
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyUnstudied, setOnlyUnstudied] = useState(false);
 
-  // Form states for adding a custom word
+  // Form states for adding custom words
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [newWord, setNewWord] = useState('');
   const [newTranslation, setNewTranslation] = useState('');
@@ -95,7 +116,30 @@ export const VocabularyBuilder: React.FC = () => {
     localStorage.setItem('hl_studied_vocab_words', JSON.stringify(studiedWordIds));
   }, [studiedWordIds]);
 
-  // Map category keys to user-friendly titles
+  // Sheet descriptions map to keep cards aligned with screenshots
+  const sheetDescriptions: Record<string, string> = {
+    'nível_a1_-_parte_1': 'Palavras fundamentais para construir frases básicas e navegar em interações simples e cotidianas.',
+    'nível_a1_-_parte_2': 'Palavras fundamentais para construir frases básicas e navegar em interações simples do dia a dia.',
+    'nível_a1_-_parte_3': 'Palavras fundamentais para construir frases básicas e navegar em interações simples do dia a dia.',
+    'nível_a1_-_parte_4': 'Palavras fundamentais para construir frases básicas e navegar em interações simples e cotidianas.',
+    'nível_a2_-_parte_1': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+    'nível_a2_-_parte_2': 'Vocabulário essencial para descrever o seu ambiente imediato e as necessidades pessoais rotineiras.',
+    'nível_a2_-_parte_3': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+    'nível_a2_-_parte_4': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+    'nível_b1_-_parte_1': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com a maioria das situações de viagem comuns.',
+    'nível_b1_-_parte_2': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+    'nível_b1_-_parte_3': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+    'nível_b1_-_parte_4': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+    'nível_b2_-_parte_1': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos temas abstratos.',
+    'nível_b2_-_parte_2': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos tópicos abstratos.',
+    'nível_b2_-_parte_3': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos temas abstratos.',
+    'presente': 'Presente - Passado - Futuro',
+    'adjetivos': 'Descritores essenciais para ajudar você a adicionar mais detalhes e variedade à sua linguagem cotidiana.',
+    'advérbios': 'Modificadores-chave para expressar como, quando e onde as ações ocorrem.',
+    'verbos': 'Palavras de ação essenciais para ajudar você a descrever atividades e estados de ser de forma clara.',
+    'c1': 'Sophisticated terms to convey subtle nuances and produce clear, well-structured text on complex subjects.'
+  };
+
   const categoryLabels: Record<string, string> = {
     comum: 'Geral',
     viagem: 'Viagem',
@@ -121,7 +165,6 @@ export const VocabularyBuilder: React.FC = () => {
     }[] = [];
 
     if (targetLanguage === 'en') {
-      // 1. For English, load spreadsheet sheets as islands
       const sheets = vocabPlanilha as SheetIsland[];
       sheets.forEach(sheet => {
         islandsList.push({
@@ -141,7 +184,6 @@ export const VocabularyBuilder: React.FC = () => {
         });
       });
     } else {
-      // 2. For other languages, group the static vocabulary by categories
       const langVocab = staticVocabulary[targetLanguage] || [];
       const categoriesGrouped: Record<string, VocabularyWord[]> = {};
       
@@ -153,7 +195,6 @@ export const VocabularyBuilder: React.FC = () => {
       });
 
       Object.entries(categoriesGrouped).forEach(([catKey, words]) => {
-        // Find dominant level for the category
         const levelsCount = { iniciante: 0, intermediario: 0, avancado: 0 };
         words.forEach(w => { if (levelsCount[w.level] !== undefined) levelsCount[w.level]++; });
         let dominantLevel: 'iniciante' | 'intermediario' | 'avancado' = 'iniciante';
@@ -173,7 +214,7 @@ export const VocabularyBuilder: React.FC = () => {
       });
     }
 
-    // 3. Always append the "Minhas Palavras" (custom user vocabulary) island
+    // Always append the "Minhas Palavras" (custom user vocabulary) island
     const langCustomWords = customWords.filter(w => w.id.startsWith(`custom-${targetLanguage}-`));
     islandsList.push({
       id: 'custom-words',
@@ -186,20 +227,109 @@ export const VocabularyBuilder: React.FC = () => {
     return islandsList;
   }, [targetLanguage, customWords]);
 
-  // Compute the currently active selected island data
+  // Define groups exactly matching the screenshot visual specification
+  const groups: GroupDefinition[] = useMemo(() => {
+    return [
+      {
+        id: 'iniciante',
+        name: 'Iniciante',
+        dotColor: '#10b981',
+        subgroups: [
+          {
+            id: 'a1',
+            circleLabel: 'A1',
+            title: 'A1',
+            description: 'Palavras fundamentais para construir frases básicas e navegar em interações simples e cotidianas.',
+            islandIds: ['nível_a1_-_parte_1', 'nível_a1_-_parte_2', 'nível_a1_-_parte_3', 'nível_a1_-_parte_4']
+          },
+          {
+            id: 'a2',
+            circleLabel: 'A2',
+            title: 'A2',
+            description: 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+            islandIds: ['nível_a2_-_parte_1', 'nível_a2_-_parte_2', 'nível_a2_-_parte_3', 'nível_a2_-_parte_4']
+          },
+          {
+            id: 'conjugacoes',
+            title: 'Conjugações Verbais Básicas',
+            description: 'Presente - Passado - Futuro',
+            isStandalone: true,
+            sheetId: 'presente'
+          }
+        ]
+      },
+      {
+        id: 'intermediario',
+        name: 'Intermediário',
+        dotColor: '#f59e0b',
+        subgroups: [
+          {
+            id: 'b1',
+            circleLabel: 'B1',
+            title: 'B1',
+            description: 'Linguagem funcional para expressar opiniões, explicar planos e lidar com a maioria das situações de viagem comuns.',
+            islandIds: ['nível_b1_-_parte_1', 'nível_b1_-_parte_2', 'nível_b1_-_parte_3', 'nível_b1_-_parte_4']
+          },
+          {
+            id: 'b2',
+            circleLabel: 'B2',
+            title: 'B2',
+            description: 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos temas abstratos.',
+            islandIds: ['nível_b2_-_parte_1', 'nível_b2_-_parte_2', 'nível_b2_-_parte_3']
+          },
+          {
+            id: 'adjetivos',
+            title: '300 Adjetivos Mais Comuns',
+            description: 'Descritores essenciais para ajudar você a adicionar mais detalhes e variedade à sua linguagem cotidiana.',
+            isStandalone: true,
+            sheetId: 'adjetivos'
+          },
+          {
+            id: 'adverbios',
+            title: 'Os 300 Advérbios Mais Comuns',
+            description: 'Modificadores-chave para expressar como, quando e onde as ações ocorrem.',
+            isStandalone: true,
+            sheetId: 'advérbios'
+          },
+          {
+            id: 'verbos',
+            title: 'Os 300 Verbos Mais Comuns',
+            description: 'Palavras de ação essenciais para ajudar você a descrever atividades e estados de ser de forma clara.',
+            isStandalone: true,
+            sheetId: 'verbos'
+          }
+        ]
+      },
+      {
+        id: 'avancado',
+        name: 'Avançado',
+        dotColor: '#ef4444',
+        subgroups: [
+          {
+            id: 'c1',
+            title: 'Gramática e vocabulário C1',
+            description: 'Sophisticated terms to convey subtle nuances and produce clear, well-structured text on complex subjects.',
+            isStandalone: true,
+            sheetId: 'c1'
+          }
+        ]
+      }
+    ];
+  }, []);
+
+  // Compute active selected island data
   const currentIsland = useMemo(() => {
     if (!activeIslandId) return null;
     return vocabIslands.find(island => island.id === activeIslandId) || null;
   }, [activeIslandId, vocabIslands]);
 
-  // Filtered words within the active island
+  // Filtered words within selected island
   const filteredWords = useMemo(() => {
     if (!currentIsland) return [];
     return currentIsland.words.filter(w => {
       const matchesSearch = 
         w.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        w.translation.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (w.example && w.example.toLowerCase().includes(searchQuery.toLowerCase()));
+        w.translation.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesFilter = !onlyUnstudied || !studiedWordIds.includes(w.id);
       
@@ -207,7 +337,7 @@ export const VocabularyBuilder: React.FC = () => {
     });
   }, [currentIsland, searchQuery, onlyUnstudied, studiedWordIds]);
 
-  // Global vocabulary stats across all active language islands
+  // Global vocabulary statistics
   const globalStats = useMemo(() => {
     let totalWords = 0;
     let totalStudied = 0;
@@ -219,7 +349,6 @@ export const VocabularyBuilder: React.FC = () => {
         if (studiedWordIds.includes(w.id)) {
           totalStudied++;
         }
-        // Check if word exists in study reviews queue
         const cleanWord = w.word.trim().toLowerCase();
         const inSystem = phrases.some((p: Phrase) => p.text.toLowerCase() === cleanWord && p.language_id === targetLanguage);
         if (inSystem) {
@@ -279,14 +408,11 @@ export const VocabularyBuilder: React.FC = () => {
 
     setCustomWords(prev => [createdWord, ...prev]);
 
-    // Reset fields
     setNewWord('');
     setNewTranslation('');
     setNewExample('');
     setNewExampleTranslation('');
     setIsFormOpen(false);
-
-    // If active island is custom words, it updates automatically
   };
 
   // Delete custom word logic
@@ -304,6 +430,14 @@ export const VocabularyBuilder: React.FC = () => {
         ? prev.filter(id => id !== wordId) 
         : [...prev, wordId]
     );
+  };
+
+  // Toggle section accordion expansion
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
   };
 
   // Import card to SM2 Spaced Repetition queue
@@ -333,13 +467,11 @@ export const VocabularyBuilder: React.FC = () => {
     }
   };
 
-  // Check if a word is in study reviews
   const isWordInQueue = (wordText: string) => {
     const cleanWord = wordText.trim().toLowerCase();
     return phrases.some((p: Phrase) => p.text.toLowerCase() === cleanWord && p.language_id === targetLanguage);
   };
 
-  // Toggle card reveal
   const toggleReveal = (wordId: string) => {
     setRevealedCardIds(prev => ({
       ...prev,
@@ -347,32 +479,136 @@ export const VocabularyBuilder: React.FC = () => {
     }));
   };
 
-  // Return custom emojis per island
-  const getIslandEmoji = (name: string, category: string) => {
-    const n = name.toLowerCase();
-    const c = category.toLowerCase();
-    if (n.includes('a1')) return '🌱';
-    if (n.includes('a2')) return '🌿';
-    if (n.includes('b1')) return '🌳';
-    if (n.includes('b2')) return '🌲';
-    if (n.includes('c1')) return '🏆';
-    if (n.includes('presente')) return '🕒';
-    if (c === 'adjetivos') return '🎨';
-    if (c === 'adverbios') return '🚀';
-    if (c === 'verbos') return '🏃';
-    if (n.includes('minhas')) return '⭐';
-    if (c === 'viagem') return '✈️';
-    if (c === 'comida') return '🍔';
-    if (c === 'trabalho') return '💼';
-    if (c === 'sentimentos') return '❤️';
-    if (c === 'dia_a_dia') return '📅';
-    return '🏝️';
+  // Render a single grid card for the catalog view (similar to screenshot layout)
+  const renderIslandCard = (islandId: string) => {
+    const island = vocabIslands.find(is => is.id === islandId);
+    if (!island) return null;
+
+    const total = island.words.length;
+    const studied = island.words.filter(w => studiedWordIds.includes(w.id)).length;
+    const percent = total > 0 ? Math.round((studied / total) * 100) : 0;
+
+    return (
+      <div
+        key={island.id}
+        onClick={() => {
+          setActiveIslandId(island.id);
+          setSearchQuery('');
+          setOnlyUnstudied(false);
+          setRevealedCardIds({});
+        }}
+        className="glass-card planner-day-card"
+        style={{
+          padding: '16px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '14px',
+          cursor: 'pointer',
+          border: '1px solid var(--border)',
+          background: 'rgba(255, 255, 255, 0.01)',
+          position: 'relative',
+          transition: 'all 0.2s',
+          minHeight: '108px'
+        }}
+      >
+        <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BookOpen size={16} style={{ color: 'var(--accent)' }} />
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+          <div>
+            <h5 style={{ fontSize: '0.88rem', fontWeight: 800, color: 'white', margin: 0 }}>
+              {island.name}
+            </h5>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0 0', lineHeight: 1.35 }}>
+              {sheetDescriptions[island.id] || 'Explore sentenças e palavras deste nível.'}
+            </p>
+          </div>
+          
+          {/* Subtle micro-progress indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+            <div style={{ flex: 1, height: '3px', background: 'rgba(255,255,255,0.03)', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? 'var(--success)' : 'var(--accent)' }} />
+            </div>
+            <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+              {percent}%
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render a full-width standalone horizontal card banner (matching present/adjective/verbs etc.)
+  const renderStandaloneCard = (sheetId: string, title: string, desc: string, groupColor: string) => {
+    const island = vocabIslands.find(is => is.id === sheetId);
+    if (!island) return null;
+
+    const total = island.words.length;
+    const studied = island.words.filter(w => studiedWordIds.includes(w.id)).length;
+    const percent = total > 0 ? Math.round((studied / total) * 100) : 0;
+
+    return (
+      <div
+        key={island.id}
+        onClick={() => {
+          setActiveIslandId(island.id);
+          setSearchQuery('');
+          setOnlyUnstudied(false);
+          setRevealedCardIds({});
+        }}
+        className="glass-card planner-day-card"
+        style={{
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          cursor: 'pointer',
+          border: '1px solid var(--border)',
+          borderLeft: `4px solid ${groupColor}`,
+          background: 'rgba(255, 255, 255, 0.01)',
+          marginTop: '12px',
+          position: 'relative'
+        }}
+      >
+        <div style={{
+          width: '38px',
+          height: '38px',
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: `1px solid ${groupColor}`,
+          flexShrink: 0
+        }}>
+          <BookOpen size={18} style={{ color: groupColor }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'white', margin: 0 }}>
+            {title}
+          </h4>
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+            {desc}
+          </p>
+        </div>
+
+        {/* Small circle progress indicator on right side */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+            {studied}/{total}
+          </span>
+          <span style={{ fontSize: '0.62rem', color: percent === 100 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 800 }}>
+            {percent}% dominado
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.25s ease-out' }}>
       
-      {/* 1. HEADER ROW */}
+      {/* 1. HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.6rem', fontWeight: 850, display: 'flex', alignItems: 'center', gap: '10px', color: 'white', margin: 0 }}>
@@ -383,7 +619,6 @@ export const VocabularyBuilder: React.FC = () => {
           </p>
         </div>
         
-        {/* Toggle Form to Add Custom Word */}
         <button
           onClick={() => setIsFormOpen(!isFormOpen)}
           style={{
@@ -407,7 +642,7 @@ export const VocabularyBuilder: React.FC = () => {
         </button>
       </div>
 
-      {/* 2. FORM TO ADD CUSTOM WORD */}
+      {/* 2. FORM TO ADD CUSTOM WORDS */}
       {isFormOpen && (
         <form 
           onSubmit={handleAddWord}
@@ -542,9 +777,9 @@ export const VocabularyBuilder: React.FC = () => {
         </form>
       )}
 
-      {/* 3. VIEW 1: CATALOG OF VOCABULARY ISLANDS */}
+      {/* 3. VIEW 1: LEVEL-GROUPED CATALOG ACCORDIONS */}
       {!activeIslandId ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Global Progress Panel */}
           <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -555,7 +790,7 @@ export const VocabularyBuilder: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px' }}>
                 <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>{globalStats.progress}%</span>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  ({globalStats.studied} de {globalStats.total} palavras dominadas • {globalStats.inReview} na fila de repetição)
+                  ({globalStats.studied} de {globalStats.total} sentenças dominadas • {globalStats.inReview} importadas para revisão)
                 </span>
               </div>
             </div>
@@ -565,89 +800,167 @@ export const VocabularyBuilder: React.FC = () => {
             </div>
           </div>
 
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '8px 0 0 0', color: 'white' }}>
-            Ilhas de Vocabulário
-          </h3>
+          {/* Standalone card for custom words */}
+          {customWords.filter(w => w.id.startsWith(`custom-${targetLanguage}-`)).length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {renderStandaloneCard('custom-words', 'Vocabulário Personalizado', 'Explore e adicione seus próprios termos de estudo personalizados.', 'var(--accent)')}
+            </div>
+          )}
 
-          {/* Grid of Vocabulary Islands */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-            gap: '16px' 
-          }}>
-            {vocabIslands.map((island) => {
-              const totalWords = island.words.length;
-              const studied = island.words.filter(w => studiedWordIds.includes(w.id)).length;
-              const percent = totalWords > 0 ? Math.round((studied / totalWords) * 100) : 0;
-              const emoji = getIslandEmoji(island.name, island.category);
-
-              return (
-                <div
-                  key={island.id}
-                  onClick={() => {
-                    setActiveIslandId(island.id);
-                    setSearchQuery('');
-                    setOnlyUnstudied(false);
-                    setRevealedCardIds({});
-                  }}
-                  className="glass-card planner-day-card"
-                  style={{
-                    padding: '20px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    cursor: 'pointer',
-                    border: '1px solid var(--border)',
-                    background: 'rgba(255, 255, 255, 0.01)',
-                    position: 'relative'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '2rem' }}>{emoji}</span>
-                    <span style={{
-                      fontSize: '0.55rem',
-                      fontWeight: 800,
-                      textTransform: 'uppercase',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background: island.level === 'avancado' ? 'rgba(239, 68, 68, 0.15)' : island.level === 'intermediario' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                      color: island.level === 'avancado' ? '#ef4444' : island.level === 'intermediario' ? '#eab308' : '#3b82f6'
-                    }}>
-                      {island.level === 'avancado' ? 'C1/C2' : island.level === 'intermediario' ? 'B1/B2' : 'A1/A2'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h4 style={{ fontSize: '1rem', fontWeight: 800, color: 'white', margin: '4px 0 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      {island.name}
-                      <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
-                    </h4>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {totalWords} sentenças cadastradas
-                    </span>
-                  </div>
-
-                  {/* Progress info */}
-                  <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                      <span>Progresso:</span>
-                      <span style={{ fontWeight: 700, color: percent > 0 ? '#10b981' : 'white' }}>{percent}% ({studied}/{totalWords})</span>
-                    </div>
-                    <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
-                      <div style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? 'var(--success)' : 'var(--accent)', transition: 'width 0.3s' }} />
-                    </div>
-                  </div>
+          {/* Rendering grouped structures when target language is English (spreadsheet view) */}
+          {targetLanguage === 'en' ? (
+            groups.map(group => (
+              <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Level Category Indicator Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: group.dotColor }} />
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 850, color: 'white', margin: 0 }}>
+                    {group.name}
+                  </h3>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Render sub-accordions and standalone cards inside level */}
+                {group.subgroups.map(subgroup => {
+                  if (subgroup.isStandalone && subgroup.sheetId) {
+                    return renderStandaloneCard(
+                      subgroup.sheetId, 
+                      subgroup.title, 
+                      subgroup.description, 
+                      group.dotColor
+                    );
+                  }
+
+                  const isCollapsed = collapsedSections[subgroup.id] || false;
+
+                  return (
+                    <div key={subgroup.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                      {/* Accordion header trigger */}
+                      <div 
+                        onClick={() => toggleSection(subgroup.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          padding: '12px 16px',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.05)',
+                          marginTop: '8px',
+                          transition: 'background 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          {subgroup.circleLabel && (
+                            <div style={{
+                              width: '34px',
+                              height: '34px',
+                              borderRadius: '50%',
+                              background: group.dotColor,
+                              color: 'white',
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.85rem'
+                            }}>
+                              {subgroup.circleLabel}
+                            </div>
+                          )}
+                          <div>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                              {subgroup.title}
+                            </h4>
+                            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                              {subgroup.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <ChevronDown 
+                          size={18} 
+                          style={{ 
+                            color: 'var(--text-muted)', 
+                            transform: isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)', 
+                            transition: 'transform 0.25s ease' 
+                          }} 
+                        />
+                      </div>
+
+                      {/* Accordion panel of inner cards */}
+                      {!isCollapsed && subgroup.islandIds && (
+                        <div 
+                          className="fade-in"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                            gap: '14px',
+                            marginTop: '10px',
+                            paddingLeft: '12px'
+                          }}
+                        >
+                          {subgroup.islandIds.map(id => renderIslandCard(id))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          ) : (
+            /* Fallback generic layout for non-English target languages */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 850, color: 'white', margin: 0 }}>
+                  Ilhas de Vocabulário
+                </h3>
+              </div>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                gap: '14px',
+                marginTop: '8px'
+              }}>
+                {vocabIslands.filter(is => is.id !== 'custom-words').map(island => renderIslandCard(island.id))}
+              </div>
+            </div>
+          )}
+
+          {/* If customWords is empty, still offer standalone card to start typing custom words */}
+          {customWords.filter(w => w.id.startsWith(`custom-${targetLanguage}-`)).length === 0 && (
+            <div 
+              onClick={() => {
+                setActiveIslandId('custom-words');
+                setIsFormOpen(true);
+              }}
+              className="glass-card planner-day-card"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                cursor: 'pointer',
+                border: '1px dashed var(--border)',
+                background: 'rgba(255, 255, 255, 0.01)',
+                marginTop: '12px',
+                justifyContent: 'center',
+                textAlign: 'center'
+              }}
+            >
+              <Plus size={16} style={{ color: 'var(--text-muted)' }} />
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Comece a adicionar suas próprias palavras personalizadas
+              </span>
+            </div>
+          )}
 
         </div>
       ) : (
-        /* 4. VIEW 2: DETAILS OF SELECTED ISLAND */
+        /* 4. VIEW 2: DETAILS OF SELECTED ISLAND - VERTICAL LIST OF SENTENCES */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Back Navigation & Title Header */}
+          {/* Back Navigation Bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             <button
               onClick={() => setActiveIslandId(null)}
@@ -670,9 +983,6 @@ export const VocabularyBuilder: React.FC = () => {
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.5rem' }}>
-                {getIslandEmoji(currentIsland?.name || '', currentIsland?.category || '')}
-              </span>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 850, color: 'white', margin: 0 }}>
                 {currentIsland?.name}
               </h3>
@@ -690,14 +1000,14 @@ export const VocabularyBuilder: React.FC = () => {
             </div>
           </div>
 
-          {/* Island-specific Toolbar */}
+          {/* Island Search and Filter toolbar */}
           <div className="glass-card" style={{ padding: '12px 16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Search Input */}
             <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Pesquisar nesta ilha..."
+                placeholder="Pesquisar sentenças nesta ilha..."
                 className="input-text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
@@ -711,7 +1021,7 @@ export const VocabularyBuilder: React.FC = () => {
               />
             </div>
 
-            {/* Filter checkbox: unstudied only */}
+            {/* Filter check: unstudied only */}
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
@@ -721,9 +1031,9 @@ export const VocabularyBuilder: React.FC = () => {
               <span>Ocultar estudadas</span>
             </label>
 
-            {/* Progress summary for this island */}
+            {/* Island study progress count */}
             {currentIsland && (
-              <div style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                 <span>
                   Concluído: <strong>{currentIsland.words.filter(w => studiedWordIds.includes(w.id)).length}</strong> de <strong>{currentIsland.words.length}</strong>
                 </span>
@@ -731,20 +1041,20 @@ export const VocabularyBuilder: React.FC = () => {
             )}
           </div>
 
-          {/* Word List within the Island */}
+          {/* List of Sentences (One below another) */}
           {filteredWords.length === 0 ? (
             <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
               <BookOpen size={40} style={{ color: 'var(--text-muted)', opacity: 0.5, marginBottom: '12px' }} />
-              <h4 style={{ fontSize: '1rem', color: 'white', margin: '0 0 4px 0' }}>Nenhuma palavra encontrada nesta ilha</h4>
+              <h4 style={{ fontSize: '1rem', color: 'white', margin: '0 0 4px 0' }}>Nenhuma sentença encontrada</h4>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
-                {onlyUnstudied ? 'Você já dominou todas as sentenças exibidas por esse filtro!' : 'Tente ajustar sua pesquisa.'}
+                {onlyUnstudied ? 'Você já marcou todas as sentenças desta ilha como vistas!' : 'Tente ajustar sua pesquisa.'}
               </p>
             </div>
           ) : (
             <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-              gap: '16px' 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '8px' 
             }}>
               {filteredWords.map((word) => {
                 const isCustom = word.id.startsWith('custom-');
@@ -755,46 +1065,110 @@ export const VocabularyBuilder: React.FC = () => {
                 return (
                   <div
                     key={word.id}
-                    className="glass-card fade-in"
                     style={{
-                      padding: '16px',
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: '12px',
-                      position: 'relative',
-                      border: isStudied ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border)',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
                       background: isStudied ? 'rgba(16, 185, 129, 0.02)' : 'rgba(255, 255, 255, 0.01)',
-                      transition: 'all 0.2s',
-                      boxShadow: isStudied ? '0 0 10px rgba(16, 185, 129, 0.05)' : 'none'
+                      border: isStudied ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      gap: '14px',
+                      transition: 'all 0.15s',
+                      flexWrap: 'wrap'
                     }}
                   >
-                    {/* Header: Tags & Delete */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: '0.55rem',
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: 'rgba(255,255,255,0.05)',
-                          color: 'var(--text-secondary)'
-                        }}>
-                          {categoryLabels[word.category] || currentIsland?.name}
-                        </span>
-                        {isCustom && (
-                          <span style={{
-                            fontSize: '0.55rem',
-                            fontWeight: 700,
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            background: 'rgba(139, 92, 246, 0.15)',
-                            color: 'var(--accent)'
-                          }}>
-                            Criada
-                          </span>
-                        )}
-                      </div>
+                    {/* Left: audio and sentence text */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '240px' }}>
+                      {/* Audio speaker trigger */}
+                      <button
+                        type="button"
+                        onClick={() => speakWord(word.word, word.id)}
+                        style={{
+                          background: playingWordId === word.id ? 'var(--accent)' : 'rgba(255,255,255,0.04)',
+                          color: playingWordId === word.id ? 'white' : 'var(--text-secondary)',
+                          border: 'none',
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <Volume2 size={15} className={playingWordId === word.id ? 'pulse-anim' : ''} />
+                      </button>
 
+                      {/* Text & Reveal trigger */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'white', margin: 0, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                          {word.word}
+                        </h4>
+                        
+                        {/* Reveal Translation area */}
+                        <div 
+                          onClick={() => toggleReveal(word.id)}
+                          style={{ cursor: 'pointer', display: 'inline-flex', marginTop: '2px' }}
+                        >
+                          {isRevealed ? (
+                            <span className="fade-in" style={{ fontSize: '0.78rem', fontWeight: 600, color: '#10b981' }}>
+                              {word.translation}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', borderBottom: '1px dotted var(--text-muted)' }}>
+                              Clique para revelar tradução
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Actions */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
+                      {/* Checkbox Studied */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', cursor: 'pointer', color: isStudied ? '#10b981' : 'var(--text-muted)' }}>
+                        <input
+                          type="checkbox"
+                          checked={isStudied}
+                          onChange={() => toggleStudied(word.id)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <span>{isStudied ? 'Visto' : 'Marcar visto'}</span>
+                      </label>
+
+                      {/* Spaced repetition queue indicator */}
+                      {inReview ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '0.72rem', fontWeight: 600 }}>
+                          <CheckCircle2 size={13} />
+                          <span>Na Revisão</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAddToReview(word)}
+                          style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: 'var(--accent)',
+                            cursor: 'pointer',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <Plus size={12} /> Importar
+                        </button>
+                      )}
+
+                      {/* Delete Custom Word button */}
                       {isCustom && (
                         <button
                           type="button"
@@ -805,7 +1179,6 @@ export const VocabularyBuilder: React.FC = () => {
                             color: 'rgba(239, 68, 68, 0.7)',
                             cursor: 'pointer',
                             padding: '2px',
-                            borderRadius: '4px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -813,141 +1186,10 @@ export const VocabularyBuilder: React.FC = () => {
                           }}
                           title="Excluir palavra"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </button>
                       )}
                     </div>
-
-                    {/* Word / Sentence Original */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                        <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3, wordBreak: 'break-word', flex: 1 }}>
-                          {word.word}
-                        </h4>
-
-                        {/* Speaker Pronunciation button */}
-                        <button
-                          type="button"
-                          onClick={() => speakWord(word.word, word.id)}
-                          style={{
-                            background: playingWordId === word.id ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-                            color: playingWordId === word.id ? 'white' : 'var(--text-secondary)',
-                            border: 'none',
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            flexShrink: 0
-                          }}
-                          title="Ouvir pronúncia"
-                        >
-                          <Volume2 size={14} className={playingWordId === word.id ? 'pulse-anim' : ''} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Translation Toggle Panel */}
-                    <div 
-                      onClick={() => toggleReveal(word.id)}
-                      style={{
-                        background: 'rgba(0,0,0,0.15)',
-                        borderRadius: '6px',
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        minHeight: '34px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px solid rgba(255,255,255,0.02)',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {isRevealed ? (
-                        <span className="fade-in" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#10b981', textAlign: 'center', lineHeight: 1.3 }}>
-                          {word.translation}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>
-                          Clique para ver a tradução
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Usage example sentence (if exists) */}
-                    {word.example && (
-                      <div style={{ 
-                        borderTop: '1px solid rgba(255,255,255,0.05)', 
-                        paddingTop: '8px', 
-                        fontSize: '0.68rem', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '2px' 
-                      }}>
-                        <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>EXEMPLO DE USO:</span>
-                        <p style={{ color: 'white', margin: 0, fontStyle: 'italic', lineHeight: 1.3 }}>
-                          "{word.example}"
-                        </p>
-                        {isRevealed && (
-                          <p className="fade-in" style={{ color: 'var(--text-secondary)', margin: 0, lineHeight: 1.3 }}>
-                            ({word.exampleTranslation})
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Bottom Action Row: Checkbox Studied and SRS Import */}
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center', 
-                      marginTop: 'auto',
-                      borderTop: '1px solid rgba(255,255,255,0.05)',
-                      paddingTop: '10px'
-                    }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', cursor: 'pointer', color: isStudied ? '#10b981' : 'var(--text-muted)' }}>
-                        <input
-                          type="checkbox"
-                          checked={isStudied}
-                          onChange={() => toggleStudied(word.id)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        <span>{isStudied ? 'Estudado' : 'Marcar visto'}</span>
-                      </label>
-
-                      {inReview ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--success)', fontSize: '0.68rem', fontWeight: 600 }}>
-                          <CheckCircle2 size={13} />
-                          <span>Na Revisão</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleAddToReview(word)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--accent)',
-                            cursor: 'pointer',
-                            fontSize: '0.68rem',
-                            fontWeight: 700,
-                            padding: '4px 6px',
-                            borderRadius: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'background 0.2s'
-                          }}
-                          title="Salvar no deck de revisões"
-                        >
-                          <Plus size={12} /> Importar
-                        </button>
-                      )}
-                    </div>
-
                   </div>
                 );
               })}
