@@ -1045,8 +1045,9 @@ export const PracticeSession: React.FC = () => {
 
   const handleBack = () => {
     stopPlayer();
+    const isVocab = activeIslandId?.startsWith('vocab_sheet_');
     setActiveIslandId(null);
-    setActiveTab('dashboard');
+    setActiveTab(isVocab ? 'vocabulary' : 'dashboard');
   };
 
   const getWeeklyCalendar = () => {

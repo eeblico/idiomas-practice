@@ -3,6 +3,8 @@ import { supabase } from '../services/supabase';
 import { syncService } from '../services/sync';
 import { calculateSM2, calculateFibonacciSpacing } from '../services/sm2';
 import seedData from '../data/seedData.json';
+import vocabPlanilha from '../data/vocabPlanilha.json';
+import { staticVocabulary } from '../data/vocabularyData';
 
 // Types
 export interface Language {
@@ -1118,9 +1120,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: '📚 Shadowing Vocab',
       description: 'Frases coletadas durante a prática de Shadowing.'
     };
+
+    const sheetDescriptions: Record<string, string> = {
+      'nível_a1_-_parte_1': 'Palavras fundamentais para construir frases básicas e navegar em interações simples e cotidianas.',
+      'nível_a1_-_parte_2': 'Palavras fundamentais para construir frases básicas e navegar em interações simples do dia a dia.',
+      'nível_a1_-_parte_3': 'Palavras fundamentais para construir frases básicas e navegar em interações simples do dia a dia.',
+      'nível_a1_-_parte_4': 'Palavras fundamentais para construir frases básicas e navegar em interações simples e cotidianas.',
+      'nível_a2_-_parte_1': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+      'nível_a2_-_parte_2': 'Vocabulário essencial para descrever o seu ambiente imediato e as necessidades pessoais rotineiras.',
+      'nível_a2_-_parte_3': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+      'nível_a2_-_parte_4': 'Vocabulário essencial para descrever seu ambiente imediato e necessidades pessoais rotineiras.',
+      'nível_b1_-_parte_1': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com a maioria das situações de viagem comuns.',
+      'nível_b1_-_parte_2': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+      'nível_b1_-_parte_3': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+      'nível_b1_-_parte_4': 'Linguagem funcional para expressar opiniões, explicar planos e lidar com as situações de viagem mais comuns.',
+      'nível_b2_-_parte_1': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos temas abstratos.',
+      'nível_b2_-_parte_2': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos tópicos abstratos.',
+      'nível_b2_-_parte_3': 'Vocabulário versátil para participar de discussões complexas e expressar pontos de vista sobre diversos temas abstratos.',
+      'presente': 'Presente - Passado - Futuro',
+      'adjetivos': 'Descritores essenciais para ajudar você a adicionar mais detalhes e variedade à sua linguagem cotidiana.',
+      'advérbios': 'Modificadores-chave para expressar como, quando e onde as ações ocorrem.',
+      'verbos': 'Palavras de ação essenciais para ajudar você a descrever atividades e estados de ser de forma clara.',
+      'c1': 'Sophisticated terms to convey subtle nuances and produce clear, well-structured text on complex subjects.'
+    };
+
+    const categoryLabels: Record<string, string> = {
+      comum: 'Geral',
+      viagem: 'Viagem',
+      trabalho: 'Trabalho',
+      dia_a_dia: 'Dia a Dia',
+      sentimentos: 'Sentimentos',
+      comida: 'Comida'
+    };
+
+    const vocabCategories: Category[] = [];
+
+    if (targetLanguage === 'en') {
+      (vocabPlanilha as any[]).forEach(sheet => {
+        vocabCategories.push({
+          id: `vocab_sheet_${sheet.id}`,
+          language_id: 'en',
+          name: sheet.name,
+          description: sheetDescriptions[sheet.id] || 'Vocabulário da Planilha'
+        });
+      });
+    } else {
+      const langVocab = staticVocabulary[targetLanguage] || [];
+      const distinctCategories = Array.from(new Set(langVocab.map(w => w.category)));
+      distinctCategories.forEach(catKey => {
+        vocabCategories.push({
+          id: `vocab_sheet_theme_${catKey}`,
+          language_id: targetLanguage,
+          name: categoryLabels[catKey] || catKey.charAt(0).toUpperCase() + catKey.slice(1),
+          description: `Vocabulário essencial sobre ${categoryLabels[catKey] || catKey}.`
+        });
+      });
+    }
+
+    // Always append the custom vocabulary category
+    vocabCategories.push({
+      id: 'vocab_sheet_custom_words',
+      language_id: targetLanguage,
+      name: 'Minhas Palavras',
+      description: 'Seu vocabulário personalizado de estudo.'
+    });
+
     const allCategories = [
       ...categories,
-      ...customCategories.filter(cc => !categories.some(c => c.id === cc.id))
+      ...vocabCategories,
+      ...customCategories.filter(cc => !categories.some(c => c.id === cc.id) && !vocabCategories.some(vc => vc.id === cc.id))
     ];
     const list = allCategories.filter(c => c.language_id === targetLanguage);
     if (list.some(c => c.id === defaultShadowingCategory.id)) {
@@ -1131,9 +1199,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Merge database phrases with custom phrases and filter by selected language
   const filteredPhrases = useMemo(() => {
+    const vocabPhrases: Phrase[] = [];
+
+    if (targetLanguage === 'en') {
+      (vocabPlanilha as any[]).forEach(sheet => {
+        sheet.words.forEach((w: any, idx: number) => {
+          vocabPhrases.push({
+            id: `vocab_word_${w.id}`,
+            language_id: 'en',
+            category_id: `vocab_sheet_${sheet.id}`,
+            text: w.word,
+            translation: w.translation,
+            explanation: `📚 **Vocabulário:** ${w.word}\n📖 **Definição:** ${w.translation}\n🏷️ **Nível:** ${sheet.level.toUpperCase()}\n📂 **Categoria:** ${sheet.category.toUpperCase()}`,
+            difficulty: sheet.level === 'avancado' ? 'hard' : sheet.level === 'intermediario' ? 'medium' : 'easy',
+            audio_url: null,
+            voice_name: 'Fenrir',
+            speed: 1.0,
+            order_index: idx
+          });
+        });
+      });
+    } else {
+      const langVocab = staticVocabulary[targetLanguage] || [];
+      langVocab.forEach((w, idx) => {
+        vocabPhrases.push({
+          id: `vocab_word_${w.id}`,
+          language_id: targetLanguage,
+          category_id: `vocab_sheet_theme_${w.category}`,
+          text: w.word,
+          translation: w.translation,
+          explanation: w.example ? `📚 **Vocabulário:** ${w.word}\n📖 **Definição:** ${w.translation}\n\n💡 **Exemplo:**\n*${w.example}*\n(${w.exampleTranslation})` : `📚 **Vocabulário:** ${w.word}\n📖 **Definição:** ${w.translation}`,
+          difficulty: w.level === 'avancado' ? 'hard' : w.level === 'intermediario' ? 'medium' : 'easy',
+          audio_url: null,
+          voice_name: 'Fenrir',
+          speed: 1.0,
+          order_index: idx
+        });
+      });
+    }
+
     const all = [
       ...phrases,
-      ...customPhrases.filter(cp => !phrases.some(p => p.id === cp.id))
+      ...vocabPhrases,
+      ...customPhrases.filter(cp => !phrases.some(p => p.id === cp.id) && !vocabPhrases.some(vp => vp.id === cp.id))
     ];
     
     // Filter out deleted phrases

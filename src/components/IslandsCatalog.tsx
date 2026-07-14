@@ -153,8 +153,8 @@ export const IslandsCatalog: React.FC = () => {
     return 'other';
   };
 
-  // Filter categories for the selected learning language
-  const languageIslands = categories.filter(c => c.language_id === targetLanguage);
+  // Filter categories for the selected learning language (excluding vocabulary builder islands)
+  const languageIslands = categories.filter(c => c.language_id === targetLanguage && !c.id.startsWith('vocab_sheet_'));
 
   // Group islands under their respective topics
   const groupedIslands: Record<string, Category[]> = {};
