@@ -1986,17 +1986,21 @@ export const PracticeSession: React.FC = () => {
                         className="phrase-card-play-btn"
                         onClick={(e) => { e.stopPropagation(); handlePhraseCardClick(phrase, idx); }}
                         style={{
-                          background: 'none',
-                          border: 'none',
-                          color: isCardPlaying ? 'var(--accent)' : 'var(--text-secondary)',
+                          background: isCardPlaying ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                          border: isCardPlaying ? '1px solid var(--accent)' : '1px solid rgba(255, 255, 255, 0.15)',
+                          color: isCardPlaying ? 'var(--accent)' : 'var(--text-primary)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          padding: '4px'
+                          width: '38px',
+                          height: '38px',
+                          borderRadius: '50%',
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0
                         }}
                       >
-                        <Volume2 size={18} style={{ color: isCardPlaying ? 'var(--accent)' : 'var(--text-muted)' }} />
+                        <Volume2 size={22} style={{ color: isCardPlaying ? 'var(--accent)' : 'var(--text-secondary)' }} />
                       </button>
 
                       {/* Phrases Target Text and translation trigger */}
