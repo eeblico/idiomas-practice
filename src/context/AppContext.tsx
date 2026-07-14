@@ -57,8 +57,8 @@ interface AppContextType {
   languages: Language[];
   categories: Category[];
   phrases: Phrase[];
-  activeTab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music';
-  setActiveTab: (tab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music') => void;
+  activeTab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music' | 'vocabulary';
+  setActiveTab: (tab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music' | 'vocabulary') => void;
   targetLanguage: string;
   setTargetLanguage: (lang: string) => void;
   activeIslandId: string | null;
@@ -188,7 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [customCategories, setCustomCategories] = useState<Category[]>([]);
 
   // Navigation / Choices
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music' | 'vocabulary'>('dashboard');
   const [targetLanguage, setTargetLanguageState] = useState<string>('en');
   const [activeIslandId, setActiveIslandIdState] = useState<string | null>(null);
   const [recentIslandIds, setRecentIslandIds] = useState<string[]>([]);

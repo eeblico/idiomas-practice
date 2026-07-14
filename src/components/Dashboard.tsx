@@ -139,7 +139,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Card 2: Vocab */}
-          <div className="learning-card learning-card-purple" onClick={() => setActiveTab('islands')}>
+          <div className="learning-card learning-card-purple" onClick={() => setActiveTab('vocabulary')}>
             <div>
               <div className="learning-card-icon">📖</div>
               <h4 className="learning-card-title">Construtor de Vocabulário</h4>

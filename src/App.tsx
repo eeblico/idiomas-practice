@@ -12,6 +12,7 @@ import { Settings } from './components/Settings';
 import { AdminPanel } from './components/AdminPanel';
 import { MediaStudy } from './components/MediaStudy';
 import { MusicStudy } from './components/MusicStudy';
+import { VocabularyBuilder } from './components/VocabularyBuilder';
 import { Menu, Wifi, WifiOff, Square } from 'lucide-react';
 import { AIChatSidebar } from './components/AIChatSidebar';
 import { BottomNav } from './components/BottomNav';
@@ -108,6 +109,8 @@ const MainAppContent: React.FC = () => {
         return <MediaStudy />;
       case 'music':
         return <MusicStudy />;
+      case 'vocabulary':
+        return <VocabularyBuilder />;
       default:
         return <Dashboard />;
     }

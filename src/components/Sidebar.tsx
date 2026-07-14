@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { AVAILABLE_LANGUAGES } from '../context/AppContext';
-import { Layout, Compass, BookOpen, Clock, ShieldAlert, User, BarChart3, ArrowRight, Video, Square, ChevronLeft, ChevronRight, Globe, Sun, Moon, Cpu, Music, X } from 'lucide-react';
+import { useApp, AVAILABLE_LANGUAGES } from '../context/AppContext';
+import { Layout, Compass, BookOpen, Clock, ShieldAlert, User, BarChart3, ArrowRight, Video, Square, ChevronLeft, ChevronRight, Globe, Sun, Moon, Cpu, Music, X, Languages } from 'lucide-react';
  
 interface SidebarProps {
   mobileOpen: boolean;
@@ -24,7 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
 
   const [langPickerOpen, setLangPickerOpen] = useState(false);
  
-  const handleNav = (tab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music') => {
+  const handleNav = (tab: 'dashboard' | 'resources' | 'islands' | 'practice' | 'review' | 'stats' | 'settings' | 'admin' | 'media' | 'music' | 'vocabulary') => {
     setActiveTab(tab);
     setMobileOpen(false);
   };
@@ -216,6 +215,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
               >
                 <Music className="sidebar-icon" />
                 <span>Músicas</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className={`sidebar-menu-item ${activeTab === 'vocabulary' ? 'active' : ''}`}
+                onClick={() => handleNav('vocabulary')}
+              >
+                <Languages className="sidebar-icon" />
+                <span>Vocabulário</span>
               </button>
             </li>
             <li>
