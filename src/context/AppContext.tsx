@@ -1205,8 +1205,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isSpanish = targetLanguage === 'es';
       (vocabPlanilha as any[]).forEach(sheet => {
         sheet.words.forEach((w: any, idx: number) => {
-          const phraseText = w.word;
-          const phraseTrans = isSpanish ? (w.translation_es || w.translation) : w.translation;
+          const phraseText = isSpanish ? (w.translation_es || w.word) : w.word;
+          const phraseTrans = isSpanish ? w.word : w.translation;
 
           vocabPhrases.push({
             id: `vocab_word_${w.id}`,
