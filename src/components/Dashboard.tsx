@@ -154,19 +154,145 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Card 3: Collections */}
-          <div className="learning-card learning-card-orange" onClick={() => setActiveTab('review')}>
+          {/* Card 3: Músicas */}
+          <div className="learning-card learning-card-orange" onClick={() => setActiveTab('music')}>
             <div>
-              <div className="learning-card-icon">⭐</div>
-              <h4 className="learning-card-title">My Collections</h4>
+              <div className="learning-card-icon">🎵</div>
+              <h4 className="learning-card-title">Músicas</h4>
               <p className="learning-card-desc">
-                Practice your saved vocabulary and favorite sentences.
+                Aprenda o idioma de forma dinâmica completando letras de músicas populares.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '16px', fontSize: '0.75rem' }}>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Favoritos</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Revisões SM2</span>
+              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Letras</span>
+              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Karaokê</span>
+              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Audição</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4b. Secondary Navigation Shortcuts (Small Cards/Chips) */}
+      <div style={{ marginTop: '-8px' }}>
+        <h4 style={{ 
+          fontSize: '0.78rem', 
+          fontWeight: 750, 
+          color: 'var(--text-muted)', 
+          textTransform: 'uppercase', 
+          letterSpacing: '0.08em', 
+          marginBottom: '12px' 
+        }}>
+          Outros Recursos & Ferramentas
+        </h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          {/* 1. Review */}
+          <div 
+            onClick={() => setActiveTab('review')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>🔁</span> Revisar Deck
+          </div>
+
+          {/* 2. Media (Filmes) */}
+          <div 
+            onClick={() => setActiveTab('media')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>🎥</span> Vídeos & Filmes
+          </div>
+
+          {/* 3. Resources */}
+          <div 
+            onClick={() => setActiveTab('resources')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>📚</span> Recursos
+          </div>
+
+          {/* 4. Stats */}
+          <div 
+            onClick={() => setActiveTab('stats')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>📊</span> Estatísticas
+          </div>
+
+          {/* 5. Settings */}
+          <div 
+            onClick={() => setActiveTab('settings')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>⚙️</span> Ajustes
           </div>
         </div>
       </div>
