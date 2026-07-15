@@ -392,8 +392,8 @@ export const VocabularyBuilder: React.FC = () => {
           </div>
         )}
 
-        {/* Level accordions catalog display (for English spreadsheet view) */}
-        {targetLanguage === 'en' ? (
+        {/* Level accordions catalog display (for English and Spanish spreadsheet views) */}
+        {targetLanguage === 'en' || targetLanguage === 'es' ? (
           groups.map(group => (
             <div key={group.id} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Level Category dot indicator */}

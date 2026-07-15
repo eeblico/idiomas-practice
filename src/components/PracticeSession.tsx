@@ -364,13 +364,14 @@ export const PracticeSession: React.FC = () => {
           resolve();
         };
 
+        const speakLang = phrase.category_id.startsWith('vocab_sheet_') ? 'en' : phrase.language_id;
         audio.onerror = () => {
           activeAudioRef.current = null;
           activeAudioResolveRef.current = null;
           if (playableUrl.startsWith('blob:')) {
             URL.revokeObjectURL(playableUrl);
           }
-          speakFallback(phrase.text, phrase.language_id).then(resolve);
+          speakFallback(phrase.text, speakLang).then(resolve);
         };
 
         audio.play().then(() => {
@@ -381,10 +382,11 @@ export const PracticeSession: React.FC = () => {
           if (playableUrl.startsWith('blob:')) {
             URL.revokeObjectURL(playableUrl);
           }
-          speakFallback(phrase.text, phrase.language_id).then(resolve);
+          speakFallback(phrase.text, speakLang).then(resolve);
         });
       } else {
-        speakFallback(phrase.text, phrase.language_id).then(resolve);
+        const speakLang = phrase.category_id.startsWith('vocab_sheet_') ? 'en' : phrase.language_id;
+        speakFallback(phrase.text, speakLang).then(resolve);
       }
     });
   };

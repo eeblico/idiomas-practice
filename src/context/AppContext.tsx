@@ -1155,11 +1155,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const vocabCategories: Category[] = [];
 
-    if (targetLanguage === 'en') {
+    if (targetLanguage === 'en' || targetLanguage === 'es') {
       (vocabPlanilha as any[]).forEach(sheet => {
         vocabCategories.push({
           id: `vocab_sheet_${sheet.id}`,
-          language_id: 'en',
+          language_id: targetLanguage,
           name: sheet.name,
           description: sheetDescriptions[sheet.id] || 'Vocabulário da Planilha'
         });
@@ -1201,15 +1201,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const filteredPhrases = useMemo(() => {
     const vocabPhrases: Phrase[] = [];
 
-    if (targetLanguage === 'en') {
+    if (targetLanguage === 'en' || targetLanguage === 'es') {
+      const isSpanish = targetLanguage === 'es';
       (vocabPlanilha as any[]).forEach(sheet => {
         sheet.words.forEach((w: any, idx: number) => {
+          const phraseText = w.word;
+          const phraseTrans = isSpanish ? (w.translation_es || w.translation) : w.translation;
+
           vocabPhrases.push({
             id: `vocab_word_${w.id}`,
-            language_id: 'en',
+            language_id: targetLanguage,
             category_id: `vocab_sheet_${sheet.id}`,
-            text: w.word,
-            translation: w.translation,
+            text: phraseText,
+            translation: phraseTrans,
             explanation: '',
             difficulty: sheet.level === 'avancado' ? 'hard' : sheet.level === 'intermediario' ? 'medium' : 'easy',
             audio_url: null,
