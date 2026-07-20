@@ -73,7 +73,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: '100%', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>HyperLingua</h1>
+        <h1 style={{ fontSize: '2rem', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>NoClima</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
           {isSignUp ? 'Crie sua conta para sincronizar seu progresso.' : 'Entre para retomar seu aprendizado.'}
         </p>

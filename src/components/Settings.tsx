@@ -319,7 +319,7 @@ export const Settings: React.FC = () => {
                   <HelpCircle size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Como usar o HyperLingua</h3>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Como usar o NoClima</h3>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Metodologia, níveis CEFR e práticas de estudo</span>
                 </div>
               </div>

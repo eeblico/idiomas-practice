@@ -39,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
           <div style={{ display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: '10px' }}>
             <Square style={{ fill: 'var(--accent)', stroke: 'none', width: '20px', height: '20px' }} />
             {!collapsed && (
-              <span>Learn<span style={{ color: 'var(--accent)' }}>Chunks</span></span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em' }}>No<span style={{ color: 'var(--accent)' }}>Clima</span></span>
             )}
           </div>
           {onToggleCollapse && (

@@ -1,12 +1,29 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Clock, HelpCircle, Volume2, ShieldAlert, Award, Star, PlayCircle, Play, Sparkles } from 'lucide-react';
+import { 
+  Clock, 
+  HelpCircle, 
+  Volume2, 
+  PlayCircle, 
+  Brain, 
+  Sprout, 
+  Users, 
+  Compass, 
+  BookOpen, 
+  Target, 
+  Film, 
+  Music, 
+  Video, 
+  RefreshCw, 
+  BarChart3, 
+  Settings as SettingsIcon,
+  Zap,
+  ArrowRight
+} from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const {
-    user,
     streak,
-    dailyGoalProgress,
     categories,
     phrases,
     setActiveIslandId,
@@ -37,6 +54,60 @@ export const Dashboard: React.FC = () => {
     setActiveTab('practice');
   };
 
+  const handleOpenClima = (climaId: string) => {
+    // Navigate to islands tab with the clima pre-selected
+    setActiveTab('islands');
+    // Store selected clima in sessionStorage for IslandsCatalog to pick up
+    sessionStorage.setItem('noclima_active_clima', climaId);
+  };
+
+  const climas = [
+    {
+      id: 'deepwork',
+      name: 'Deep Work',
+      subtitle: 'Clima Analítico & Alta Performance',
+      description: 'Estratégias de branding, negócios, tomada de decisão, finanças, leis e conectores lógicos.',
+      icon: <Brain size={26} />,
+      color: '#8b5cf6',
+      badgeBg: 'rgba(139, 92, 246, 0.12)',
+      borderColor: 'rgba(139, 92, 246, 0.25)',
+      gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(99, 102, 241, 0.04) 100%)'
+    },
+    {
+      id: 'flow',
+      name: 'Flow',
+      subtitle: 'Clima de Identidade & Rotina',
+      description: 'Sentimentos, quem você é, rotinas diárias, rituais de bem-estar (Obsidian, yoga) e fisiologia.',
+      icon: <Sprout size={26} />,
+      color: '#10b981',
+      badgeBg: 'rgba(16, 185, 129, 0.12)',
+      borderColor: 'rgba(16, 185, 129, 0.25)',
+      gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.04) 100%)'
+    },
+    {
+      id: 'influence',
+      name: 'Influence',
+      subtitle: 'Conexão & Impacto Interpessoal',
+      description: 'Comunicação social, mediação de diálogos, empoderamento, relacionamentos e polidez.',
+      icon: <Users size={26} />,
+      color: '#f59e0b',
+      badgeBg: 'rgba(245, 158, 11, 0.12)',
+      borderColor: 'rgba(245, 158, 11, 0.25)',
+      gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.04) 100%)'
+    },
+    {
+      id: 'explorer',
+      name: 'Explorer',
+      subtitle: 'Clima Lúdico & Descoberta',
+      description: 'Lazer, viagens, gastronomia, hobbies, esportes, cultura pop e interações leves.',
+      icon: <Compass size={26} />,
+      color: '#3b82f6',
+      badgeBg: 'rgba(59, 130, 246, 0.12)',
+      borderColor: 'rgba(59, 130, 246, 0.25)',
+      gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(2, 132, 199, 0.04) 100%)'
+    }
+  ];
+
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
       
@@ -44,9 +115,11 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontSize: '1.9rem', fontWeight: 800, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            Bem-vindo de volta 👋
+            Bem-vindo ao <span style={{ color: 'var(--accent)' }}>NoClima</span> 👋
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '2px' }}>Pronto para continuar</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+            Aquisição de linguagem alinhada ao seu estado de energia, intenção e rotina real.
+          </p>
         </div>
         
         {/* Streak counter pill */}
@@ -76,7 +149,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="stat-box-info">
             <span className="stat-box-value">0m</span>
-            <span className="stat-box-label">Today</span>
+            <span className="stat-box-label">Hoje</span>
           </div>
         </div>
 
@@ -101,79 +174,144 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Launch month notification banner */}
-      <div style={{
-        background: 'rgba(59, 130, 246, 0.08)',
-        border: '1px solid rgba(59, 130, 246, 0.15)',
-        borderRadius: 'var(--radius-md)',
-        padding: '14px 20px',
-        color: 'var(--text-secondary)',
-        fontSize: '0.85rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
-      }}>
-        <Sparkles size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
-        <span>All Pro features are free during our launch month — enjoy full access while it lasts.</span>
-      </div>
-
-      {/* 4. Start Learning Colored Cards Grid */}
+      {/* 3. MACRO-CLIMAS GRID */}
       <div>
-        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px' }}>Start Learning</h3>
-        
-        <div className="learning-grid">
-          {/* Card 1: Islands */}
-          <div className="learning-card learning-card-blue" onClick={() => setActiveTab('islands')}>
-            <div>
-              <div className="learning-card-icon">🏝️</div>
-              <h4 className="learning-card-title">Ilhas de Idiomas</h4>
-              <p className="learning-card-desc">
-                Aprenda com temas da vida real com diálogos, histórias e frases.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '6px', marginTop: '16px', fontSize: '0.75rem' }}>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Tópicos</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Diálogos</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Histórias</span>
-            </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Selecione o seu Clima de Energia</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+              Escolha a vibração e intenção mental para o seu momento de estudo
+            </p>
           </div>
+          <button
+            onClick={() => setActiveTab('islands')}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            Ver todas as ilhas <ArrowRight size={14} />
+          </button>
+        </div>
 
-          {/* Card 2: Vocab */}
-          <div className="learning-card learning-card-purple" onClick={() => setActiveTab('vocabulary')}>
-            <div>
-              <div className="learning-card-icon">📖</div>
-              <h4 className="learning-card-title">Construtor de Vocabulário</h4>
-              <p className="learning-card-desc">
-                Domine palavras essenciais organizadas por categoria e frequência.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '6px', marginTop: '16px', fontSize: '0.75rem' }}>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Iniciante</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Intermediate</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Advanced</span>
-            </div>
-          </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
+          gap: '16px'
+        }}>
+          {climas.map(clima => (
+            <div
+              key={clima.id}
+              onClick={() => handleOpenClima(clima.id)}
+              className="glass-card active-glow"
+              style={{
+                padding: '20px',
+                borderRadius: 'var(--radius-md)',
+                background: clima.gradient,
+                border: `1px solid ${clima.borderColor}`,
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px',
+                transition: 'all 0.25s ease',
+                position: 'relative'
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: clima.badgeBg,
+                    color: clima.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `1px solid ${clima.borderColor}`
+                  }}>
+                    {clima.icon}
+                  </div>
 
-          {/* Card 3: Músicas */}
-          <div className="learning-card learning-card-orange" onClick={() => setActiveTab('music')}>
-            <div>
-              <div className="learning-card-icon">🎵</div>
-              <h4 className="learning-card-title">Músicas</h4>
-              <p className="learning-card-desc">
-                Aprenda o idioma de forma dinâmica completando letras de músicas populares.
-              </p>
+                  <span style={{
+                    fontSize: '0.65rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: clima.color,
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    background: clima.badgeBg
+                  }}>
+                    Clima Active
+                  </span>
+                </div>
+
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                  {clima.name}
+                </h4>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: clima.color, display: 'block', marginTop: '2px' }}>
+                  {clima.subtitle}
+                </span>
+
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.45 }}>
+                  {clima.description}
+                </p>
+              </div>
+
+              {/* Sub-ilhas pills (Story, Core, Pop Lab) */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                paddingTop: '12px',
+                borderTop: '1px solid rgba(255,255,255,0.06)'
+              }}>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.06)',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <BookOpen size={11} style={{ color: clima.color }} /> Story
+                </span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.06)',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <Target size={11} style={{ color: clima.color }} /> Core
+                </span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  background: 'rgba(255,255,255,0.06)',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <Film size={11} style={{ color: clima.color }} /> Pop Lab
+                </span>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '6px', marginTop: '16px', fontSize: '0.75rem' }}>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Letras</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Karaokê</span>
-              <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px' }}>Audição</span>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* 4b. Secondary Navigation Shortcuts (Small Cards/Chips) */}
-      <div style={{ marginTop: '-8px' }}>
+      {/* 4. Quick Tools Bar */}
+      <div>
         <h4 style={{ 
           fontSize: '0.78rem', 
           fontWeight: 750, 
@@ -182,12 +320,12 @@ export const Dashboard: React.FC = () => {
           letterSpacing: '0.08em', 
           marginBottom: '12px' 
         }}>
-          Outros Recursos & Ferramentas
+          Ferramentas & Estúdios Rápidos
         </h4>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          {/* 1. Review */}
+          {/* Vocabulário */}
           <div 
-            onClick={() => setActiveTab('review')}
+            onClick={() => setActiveTab('vocabulary')}
             className="glass-card active-glow"
             style={{
               display: 'flex',
@@ -197,17 +335,39 @@ export const Dashboard: React.FC = () => {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
               color: 'white',
               background: 'rgba(255,255,255,0.01)',
               transition: 'all 0.2s'
             }}
           >
-            <span style={{ fontSize: '1rem' }}>🔁</span> Revisar Deck
+            <BookOpen size={16} style={{ color: '#8b5cf6' }} /> Construtor de Vocabulário
           </div>
 
-          {/* 2. Media (Filmes) */}
+          {/* Músicas */}
+          <div 
+            onClick={() => setActiveTab('music')}
+            className="glass-card active-glow"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              color: 'white',
+              background: 'rgba(255,255,255,0.01)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Music size={16} style={{ color: '#f59e0b' }} /> Estúdio de Músicas
+          </div>
+
+          {/* Shadowing / Filmes */}
           <div 
             onClick={() => setActiveTab('media')}
             className="glass-card active-glow"
@@ -219,19 +379,19 @@ export const Dashboard: React.FC = () => {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
               color: 'white',
               background: 'rgba(255,255,255,0.01)',
               transition: 'all 0.2s'
             }}
           >
-            <span style={{ fontSize: '1rem' }}>🎥</span> Vídeos & Filmes
+            <Video size={16} style={{ color: '#3b82f6' }} /> Shadowing & Vídeos
           </div>
 
-          {/* 3. Resources */}
+          {/* Revisar Deck */}
           <div 
-            onClick={() => setActiveTab('resources')}
+            onClick={() => setActiveTab('review')}
             className="glass-card active-glow"
             style={{
               display: 'flex',
@@ -241,17 +401,17 @@ export const Dashboard: React.FC = () => {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
               color: 'white',
               background: 'rgba(255,255,255,0.01)',
               transition: 'all 0.2s'
             }}
           >
-            <span style={{ fontSize: '1rem' }}>📚</span> Recursos
+            <RefreshCw size={16} style={{ color: '#10b981' }} /> Revisão Espaçada (SM2)
           </div>
 
-          {/* 4. Stats */}
+          {/* Estatísticas */}
           <div 
             onClick={() => setActiveTab('stats')}
             className="glass-card active-glow"
@@ -263,17 +423,17 @@ export const Dashboard: React.FC = () => {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
               color: 'white',
               background: 'rgba(255,255,255,0.01)',
               transition: 'all 0.2s'
             }}
           >
-            <span style={{ fontSize: '1rem' }}>📊</span> Estatísticas
+            <BarChart3 size={16} style={{ color: '#ec4899' }} /> Estatísticas
           </div>
 
-          {/* 5. Settings */}
+          {/* Ajustes */}
           <div 
             onClick={() => setActiveTab('settings')}
             className="glass-card active-glow"
@@ -285,14 +445,14 @@ export const Dashboard: React.FC = () => {
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               fontWeight: 700,
               color: 'white',
               background: 'rgba(255,255,255,0.01)',
               transition: 'all 0.2s'
             }}
           >
-            <span style={{ fontSize: '1rem' }}>⚙️</span> Ajustes
+            <SettingsIcon size={16} style={{ color: 'var(--text-muted)' }} /> Ajustes
           </div>
         </div>
       </div>
@@ -300,7 +460,7 @@ export const Dashboard: React.FC = () => {
       {/* 5. Recent Lessons List */}
       <div className="lessons-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Recent Lessons</h3>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Lições Recentes</h3>
           <button 
             onClick={() => setActiveTab('islands')}
             style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
@@ -312,14 +472,14 @@ export const Dashboard: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {recentIslands.length === 0 ? (
             <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              Nenhuma lição iniciada recentemente. Vá para a aba Ilhas para começar!
+              Nenhuma lição iniciada recentemente. Escolha um Clima acima para começar!
             </div>
           ) : (
             recentIslands.map((island) => (
               <div key={island.id} className="lesson-row">
                 <div className="lesson-info">
                   <div className="lesson-icon-wrapper">
-                    🏝️
+                    <Target size={18} style={{ color: 'var(--accent)' }} />
                   </div>
                   <div className="lesson-details">
                     <span className="lesson-name">{island.name}</span>
@@ -347,19 +507,6 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Basic Tip Section */}
-      <div style={{
-        background: 'rgba(245, 158, 11, 0.06)',
-        border: '1px solid rgba(245, 158, 11, 0.12)',
-        borderRadius: 'var(--radius-md)',
-        padding: '12px 20px',
-        fontSize: '0.8rem',
-        color: 'var(--text-secondary)',
-        lineHeight: 1.4
-      }}>
-        💡 <strong>Tip:</strong> Practice both <strong>Listen & Repeat</strong> and <strong>Active Recall</strong> modes for best results!
-      </div>
-      
     </div>
   );
 };
