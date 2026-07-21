@@ -78,6 +78,7 @@ export const PracticeSession: React.FC = () => {
   // Island Edit/Migrate states inside Practice Settings modal
   const [islandEditName, setIslandEditName] = useState('');
   const [islandEditClima, setIslandEditClima] = useState('flow');
+  const [islandEditSubstructure, setIslandEditSubstructure] = useState('core');
   const [islandSaveSuccess, setIslandSaveSuccess] = useState(false);
 
   useEffect(() => {
@@ -85,6 +86,9 @@ export const PracticeSession: React.FC = () => {
       setIslandEditName(island.name);
       const matchedClima = island.description?.match(/\[(deepwork|flow|influence|explorer)\]/);
       setIslandEditClima(matchedClima ? matchedClima[1] : 'flow');
+
+      const matchedSub = island.description?.match(/\[(story|core|poplab)\]/);
+      setIslandEditSubstructure(matchedSub ? matchedSub[1] : 'core');
     }
   }, [island, settingsOpen]);
   
@@ -2321,7 +2325,7 @@ export const PracticeSession: React.FC = () => {
 
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Macro-Clima de Energia (Mudar Ilha de Lugar)
+                      1. Macro-Clima de Energia (Mudar Clima)
                     </label>
                     <select
                       value={islandEditClima}
@@ -2343,13 +2347,36 @@ export const PracticeSession: React.FC = () => {
                     </select>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      2. Sub-ilha / Sub-estrutura (Mudar de Categoria)
+                    </label>
+                    <select
+                      value={islandEditSubstructure}
+                      onChange={e => setIslandEditSubstructure(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border)',
+                        color: 'white',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      <option value="story">📜 Story (Decks Pessoais / Narrativos)</option>
+                      <option value="core">🎯 Core (Decks Fixos Essenciais)</option>
+                      <option value="poplab">🍿 Pop Lab (Cultura Pop, Filmes e Músicas)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
                     <button
                       type="button"
                       onClick={() => {
                         if (!islandEditName.trim()) return;
                         const currentDesc = island.description || '';
-                        updateCategory(island.id, islandEditName.trim(), currentDesc, islandEditClima);
+                        updateCategory(island.id, islandEditName.trim(), currentDesc, islandEditClima, islandEditSubstructure);
                         setIslandSaveSuccess(true);
                         setTimeout(() => setIslandSaveSuccess(false), 3000);
                       }}

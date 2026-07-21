@@ -110,7 +110,7 @@ interface AppContextType {
   deletePhrase: (phraseId: string) => void;
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
-  updateCategory: (categoryId: string, name: string, description: string, clima: string) => Promise<void>;
+  updateCategory: (categoryId: string, name: string, description: string, clima: string, substructure?: string) => Promise<void>;
   deleteCustomCategory: (categoryId: string) => Promise<void>;
   recentIslandIds: string[];
 }
@@ -1136,9 +1136,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newCategory.id;
   };
 
-  const updateCategory = async (categoryId: string, name: string, description: string, clima: string) => {
-    const cleanDesc = description.replace(/\[(deepwork|flow|influence|explorer)\]/g, '').trim();
-    const formattedDesc = `${cleanDesc} [${clima}]`;
+  const updateCategory = async (categoryId: string, name: string, description: string, clima: string, substructure?: string) => {
+    const cleanDesc = description.replace(/\[(deepwork|flow|influence|explorer|story|core|poplab)\]/g, '').trim();
+    const subTag = substructure ? `[${substructure}]` : '';
+    const formattedDesc = `${cleanDesc} [${clima}] ${subTag}`.trim();
 
     // 1. Update custom categories if custom
     const isCustom = customCategories.some(c => c.id === categoryId);
