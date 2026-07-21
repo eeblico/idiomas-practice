@@ -240,58 +240,18 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Box 3: Contagem Regressiva do Trimestre com Anel de Progresso SVG */}
+        {/* Box 3: Contagem Regressiva do Trimestre (Semanas / Dias) */}
         <div className="stat-box">
-          <div 
-            className="stat-box-icon" 
-            style={{ 
-              color: '#8b5cf6', 
-              backgroundColor: 'rgba(139, 92, 246, 0.1)',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            {/* SVG Circular Border Progress around icon */}
-            <svg 
-              width="38" 
-              height="38" 
-              viewBox="0 0 38 38" 
-              style={{ 
-                position: 'absolute', 
-                top: '-3px', 
-                left: '-3px', 
-                transform: 'rotate(-90deg)',
-                pointerEvents: 'none'
-              }}
-            >
-              <circle
-                cx="19"
-                cy="19"
-                r="17"
-                fill="none"
-                stroke="rgba(139, 92, 246, 0.2)"
-                strokeWidth="2.5"
-              />
-              <circle
-                cx="19"
-                cy="19"
-                r="17"
-                fill="none"
-                stroke="#8b5cf6"
-                strokeWidth="2.5"
-                strokeDasharray={106.8}
-                strokeDashoffset={106.8 - (106.8 * quarterInfo.elapsedPct) / 100}
-                strokeLinecap="round"
-                style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-              />
-            </svg>
-            <Calendar size={18} />
+          <div className="stat-box-icon" style={{ color: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)' }}>
+            <Calendar size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">{quarterInfo.displayStr}</span>
-            <span className="stat-box-label">Fim do Trimestre</span>
+            <span className="stat-box-value" style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 850, color: 'white' }}>{quarterInfo.weeksLeft} sem</span>
+              <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.9rem' }}>/</span>
+              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#a78bfa' }}>{quarterInfo.daysLeft}d</span>
+            </span>
+            <span className="stat-box-label">Fim do Trimestre ({quarterInfo.quarterName})</span>
           </div>
         </div>
       </div>
