@@ -197,12 +197,9 @@ export const IslandsCatalog: React.FC = () => {
         gap: '16px'
       }}>
         <div>
-          <h2 style={{ fontSize: '1.8rem', fontFamily: 'var(--font-display)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h2 style={{ fontSize: '1.8rem', fontFamily: 'var(--font-display)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
             🏝️ Ilhas de Idiomas — <span style={{ color: 'var(--accent)' }}>NoClima</span>
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
-            Navegação por <strong>4 Macro-Climas de Energia Mental</strong> e 3 Sub-estruturas de prática.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -436,9 +433,6 @@ export const IslandsCatalog: React.FC = () => {
                         {clima.subtitle}
                       </span>
                     </div>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px', margin: 0 }}>
-                      {clima.description}
-                    </p>
                   </div>
                 </div>
 

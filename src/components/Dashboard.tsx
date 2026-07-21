@@ -114,12 +114,9 @@ export const Dashboard: React.FC = () => {
       {/* 1. Greeting header */}
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontSize: '1.9rem', fontWeight: 800, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{ fontSize: '1.9rem', fontWeight: 800, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
             Bem-vindo ao <span style={{ color: 'var(--accent)' }}>NoClima</span> 👋
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
-            Aquisição de linguagem alinhada ao seu estado de energia, intenção e rotina real.
-          </p>
         </div>
         
         {/* Streak counter pill */}
@@ -177,12 +174,7 @@ export const Dashboard: React.FC = () => {
       {/* 3. MACRO-CLIMAS GRID */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Selecione o seu Clima de Energia</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-              Escolha a vibração e intenção mental para o seu momento de estudo
-            </p>
-          </div>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Macro-Climas de Energia</h3>
           <button
             onClick={() => setActiveTab('islands')}
             style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -218,8 +210,8 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div style={{
-                    width: '46px',
-                    height: '46px',
+                    width: '44px',
+                    height: '44px',
                     borderRadius: '12px',
                     background: clima.badgeBg,
                     color: clima.color,
@@ -241,20 +233,16 @@ export const Dashboard: React.FC = () => {
                     borderRadius: '20px',
                     background: clima.badgeBg
                   }}>
-                    Clima Active
+                    Active
                   </span>
                 </div>
 
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                <h4 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', margin: 0 }}>
                   {clima.name}
                 </h4>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: clima.color, display: 'block', marginTop: '2px' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: clima.color, display: 'block', marginTop: '2px' }}>
                   {clima.subtitle}
                 </span>
-
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.45 }}>
-                  {clima.description}
-                </p>
               </div>
 
               {/* Sub-ilhas pills (Story, Core, Pop Lab) */}
