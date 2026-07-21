@@ -19,7 +19,8 @@ import {
   Settings as SettingsIcon,
   Zap,
   ArrowRight,
-  Sun
+  Sun,
+  Calendar
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -30,75 +31,83 @@ export const Dashboard: React.FC = () => {
     setActiveIslandId,
     setActiveTab,
     recentIslandIds,
-    phraseStars,
-    reviewItems,
-    targetLanguage
+    completedToday
   } = useApp();
 
-  // 1. Calculate Today's study time
+  // 1. Calculate Today's active platform usage time (seconds active on NoClima today)
   const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
-  const todayTimeSec = React.useMemo(() => {
+  const [activeSecsToday, setActiveSecsToday] = React.useState<number>(() => {
     try {
-      const storedDaily = localStorage.getItem(`hl_stats_today_time_sec_${todayStr}`);
-      if (storedDaily) return Number(storedDaily) || 0;
-      
-      // Fallback check overall study counts
-      const counts = localStorage.getItem('hl_study_daily_counts');
-      if (counts) {
-        const parsed = JSON.parse(counts);
-        if (parsed[todayStr]) return (parsed[todayStr] * 45) || 0; // est 45s per item
-      }
-      return 0;
+      const key = `noclima_active_time_${todayStr}`;
+      const legacy = localStorage.getItem(`hl_stats_today_time_sec_${todayStr}`);
+      return Number(localStorage.getItem(key) || legacy || '0');
     } catch {
       return 0;
     }
+  });
+
+  React.useEffect(() => {
+    const key = `noclima_active_time_${todayStr}`;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setActiveSecsToday(prev => {
+          const next = prev + 1;
+          try {
+            localStorage.setItem(key, String(next));
+          } catch {}
+          return next;
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [todayStr]);
 
-  const todayTimeFormatted = React.useMemo(() => {
-    const hrs = Math.floor(todayTimeSec / 3600);
-    const mins = Math.floor((todayTimeSec % 3600) / 60);
+  const activeTimeFormatted = React.useMemo(() => {
+    const hrs = Math.floor(activeSecsToday / 3600);
+    const mins = Math.floor((activeSecsToday % 3600) / 60);
     if (hrs > 0) return `${hrs}h ${mins}m`;
     return `${mins}m`;
-  }, [todayTimeSec]);
+  }, [activeSecsToday]);
 
-  // 2. Calculate Comprehension CEFR Level
-  const targetPhrases = React.useMemo(() => {
-    return (phrases || []).filter(p => p && p.language_id === targetLanguage);
-  }, [phrases, targetLanguage]);
+  // 2. Calculate Quarter Countdown & Progress Percentage Ring
+  const quarterInfo = React.useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed (0=Jan ... 11=Dec)
 
-  const comprehensionCount = React.useMemo(() => {
-    return targetPhrases.filter(p => {
-      const star = phraseStars[p.id] || 0;
-      const rev = reviewItems?.[p.id];
-      return star > 0 || rev !== undefined;
-    }).length;
-  }, [targetPhrases, phraseStars, reviewItems]);
+    // Current quarter index: 0=Q1 (Jan-Mar), 1=Q2 (Apr-Jun), 2=Q3 (Jul-Sep), 3=Q4 (Oct-Dec)
+    const quarterIndex = Math.floor(month / 3);
+    const qStartMonth = quarterIndex * 3;
+    const qEndMonth = qStartMonth + 2;
 
-  const comprehensionCEFR = React.useMemo(() => {
-    if (comprehensionCount >= 501) return 'C1';
-    if (comprehensionCount >= 251) return 'B2';
-    if (comprehensionCount >= 121) return 'B1';
-    if (comprehensionCount >= 51) return 'A2';
-    if (comprehensionCount >= 11) return 'A1';
-    return 'A0';
-  }, [comprehensionCount]);
+    const qStart = new Date(year, qStartMonth, 1, 0, 0, 0);
+    const qEnd = new Date(year, qEndMonth + 1, 0, 23, 59, 59);
 
-  // 3. Calculate Speaking CEFR Level
-  const speakingCount = React.useMemo(() => {
-    return targetPhrases.filter(p => {
-      const star = phraseStars[p.id] || 0;
-      return star >= 4;
-    }).length;
-  }, [targetPhrases, phraseStars]);
+    const totalMs = qEnd.getTime() - qStart.getTime();
+    const elapsedMs = Math.max(0, now.getTime() - qStart.getTime());
+    const remainingMs = Math.max(0, qEnd.getTime() - now.getTime());
 
-  const speakingCEFR = React.useMemo(() => {
-    if (speakingCount >= 251) return 'C1';
-    if (speakingCount >= 126) return 'B2';
-    if (speakingCount >= 61) return 'B1';
-    if (speakingCount >= 26) return 'A2';
-    if (speakingCount >= 6) return 'A1';
-    return 'A0';
-  }, [speakingCount]);
+    const daysLeft = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+    const weeksLeft = Math.floor(daysLeft / 7);
+    const remDays = daysLeft % 7;
+
+    const elapsedPct = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+
+    let displayStr = `${daysLeft}d`;
+    if (weeksLeft > 0) {
+      displayStr = `${weeksLeft} sem ${remDays}d`;
+    }
+
+    return {
+      quarterName: `Q${quarterIndex + 1}`,
+      weeksLeft,
+      remDays,
+      daysLeft,
+      displayStr,
+      elapsedPct
+    };
+  }, []);
 
   // Get recently studied/visited islands, falling back to first 3 if none
   const getRecentIslands = () => {
@@ -209,33 +218,80 @@ export const Dashboard: React.FC = () => {
 
       {/* 2. Horizontal Stats Row */}
       <div className="stats-row">
+        {/* Box 1: Minutos de uso na plataforma hoje */}
         <div className="stat-box">
           <div className="stat-box-icon" style={{ color: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)' }}>
             <Clock size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">{todayTimeFormatted}</span>
+            <span className="stat-box-value">{activeTimeFormatted}</span>
             <span className="stat-box-label">Hoje</span>
           </div>
         </div>
 
+        {/* Box 2: Frases Praticadas Hoje */}
         <div className="stat-box">
           <div className="stat-box-icon" style={{ color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' }}>
-            <HelpCircle size={20} />
+            <BookOpen size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">{comprehensionCEFR}</span>
-            <span className="stat-box-label">Compreensão</span>
+            <span className="stat-box-value">{completedToday}</span>
+            <span className="stat-box-label">Praticadas Hoje</span>
           </div>
         </div>
 
+        {/* Box 3: Contagem Regressiva do Trimestre com Anel de Progresso SVG */}
         <div className="stat-box">
-          <div className="stat-box-icon" style={{ color: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)' }}>
-            <Volume2 size={20} />
+          <div 
+            className="stat-box-icon" 
+            style={{ 
+              color: '#8b5cf6', 
+              backgroundColor: 'rgba(139, 92, 246, 0.1)',
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {/* SVG Circular Border Progress around icon */}
+            <svg 
+              width="38" 
+              height="38" 
+              viewBox="0 0 38 38" 
+              style={{ 
+                position: 'absolute', 
+                top: '-3px', 
+                left: '-3px', 
+                transform: 'rotate(-90deg)',
+                pointerEvents: 'none'
+              }}
+            >
+              <circle
+                cx="19"
+                cy="19"
+                r="17"
+                fill="none"
+                stroke="rgba(139, 92, 246, 0.2)"
+                strokeWidth="2.5"
+              />
+              <circle
+                cx="19"
+                cy="19"
+                r="17"
+                fill="none"
+                stroke="#8b5cf6"
+                strokeWidth="2.5"
+                strokeDasharray={106.8}
+                strokeDashoffset={106.8 - (106.8 * quarterInfo.elapsedPct) / 100}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+              />
+            </svg>
+            <Calendar size={18} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">{speakingCEFR}</span>
-            <span className="stat-box-label">Fala</span>
+            <span className="stat-box-value">{quarterInfo.displayStr}</span>
+            <span className="stat-box-label">Fim do Trimestre</span>
           </div>
         </div>
       </div>
