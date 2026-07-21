@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Layout, BookOpen, Video, Music, Clock } from 'lucide-react';
+import { Layout, BookOpen, Video, Music, Clock, Sparkles } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const { activeTab, setActiveTab, reviewsDueCount } = useApp();
@@ -68,6 +68,15 @@ export const BottomNav: React.FC = () => {
             {reviewsDueCount}
           </span>
         )}
+      </button>
+
+      {/* IA Chat button - Restrict to bottom tab bar on mobile */}
+      <button 
+        className="nav-item"
+        onClick={() => window.dispatchEvent(new Event('toggle_ai_chat'))}
+      >
+        <Sparkles className="nav-icon" style={{ color: '#f59e0b' }} />
+        <span>IA Chat</span>
       </button>
     </nav>
   );

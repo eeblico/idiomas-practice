@@ -110,6 +110,7 @@ interface AppContextType {
   deletePhrase: (phraseId: string) => void;
   customCategories: Category[];
   addCustomCategory: (name: string, description: string) => Promise<string>;
+  updateCategory: (categoryId: string, name: string, description: string, clima: string) => Promise<void>;
   deleteCustomCategory: (categoryId: string) => Promise<void>;
   recentIslandIds: string[];
 }
@@ -1135,6 +1136,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newCategory.id;
   };
 
+  const updateCategory = async (categoryId: string, name: string, description: string, clima: string) => {
+    const cleanDesc = description.replace(/\[(deepwork|flow|influence|explorer)\]/g, '').trim();
+    const formattedDesc = `${cleanDesc} [${clima}]`;
+
+    // 1. Update custom categories if custom
+    const isCustom = customCategories.some(c => c.id === categoryId);
+    if (isCustom) {
+      const nextCustom = customCategories.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c);
+      setCustomCategories(nextCustom);
+      localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustom));
+    }
+
+    // 2. Persist override locally for built-in categories
+    const storedOverrides = localStorage.getItem('hl_category_overrides');
+    const overrides = storedOverrides ? JSON.parse(storedOverrides) : {};
+    overrides[categoryId] = { name, description: formattedDesc };
+    localStorage.setItem('hl_category_overrides', JSON.stringify(overrides));
+
+    // 3. Update categories state
+    setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c));
+  };
+
   const deleteCustomCategory = async (categoryId: string) => {
     const nextCustomCats = customCategories.filter(c => c.id !== categoryId);
     setCustomCategories(nextCustomCats);
@@ -1390,6 +1413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deletePhrase,
         customCategories,
         addCustomCategory,
+        updateCategory,
         deleteCustomCategory,
         recentIslandIds
       }}

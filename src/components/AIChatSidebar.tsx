@@ -197,6 +197,18 @@ export const AIChatSidebar: React.FC = () => {
     setShowBatchSaveForm(false);
   }, [targetLanguage]);
 
+  // Listen for open/toggle AI Chat events from navigation (e.g. mobile bottom nav)
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    const handleToggle = () => setIsOpen(prev => !prev);
+    window.addEventListener('open_ai_chat', handleOpen);
+    window.addEventListener('toggle_ai_chat', handleToggle);
+    return () => {
+      window.removeEventListener('open_ai_chat', handleOpen);
+      window.removeEventListener('toggle_ai_chat', handleToggle);
+    };
+  }, []);
+
   // Load custom prompts from local storage
   useEffect(() => {
     const stored = localStorage.getItem('hl_study_prompts');
@@ -1273,6 +1285,9 @@ Regras:
           border-color: transparent;
         }
         @media (max-width: 768px) {
+          .chat-fab {
+            display: none !important;
+          }
           .chat-sidebar {
             left: 0;
             width: 100vw;

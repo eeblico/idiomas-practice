@@ -11,7 +11,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="display:flex; height:100vh; width:100vw; align-items:center; justify-content:center; background:#0b0f19;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px;">
+          <svg style="width:64px; height:64px; animation: spinSun 3s linear infinite; filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.8));" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="28" fill="#f59e0b"/>
+            <g stroke="#f59e0b" stroke-width="7" stroke-linecap="round">
+              <line x1="50" y1="5" x2="50" y2="15"/>
+              <line x1="50" y1="85" x2="50" y2="95"/>
+              <line x1="5" y1="50" x2="15" y2="50"/>
+              <line x1="85" y1="50" x2="95" y2="50"/>
+              <line x1="18" y1="18" x2="25" y2="25"/>
+              <line x1="75" y1="75" x2="82" y2="82"/>
+              <line x1="18" y1="82" x2="25" y2="75"/>
+              <line x1="75" y1="25" x2="82" y2="18"/>
+            </g>
+          </svg>
+          <span style="font-family: 'Outfit', system-ui, sans-serif; font-size:1.1rem; font-weight:800; color:#f59e0b; letter-spacing:0.05em;">NoClima</span>
+        </div>
+      </div>
+      <style>
+        @keyframes spinSun {
+          0% { transform: rotate(0deg) scale(0.95); }
+          50% { transform: rotate(180deg) scale(1.12); }
+          100% { transform: rotate(360deg) scale(0.95); }
+        }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

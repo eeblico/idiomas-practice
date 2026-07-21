@@ -13,7 +13,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { MediaStudy } from './components/MediaStudy';
 import { MusicStudy } from './components/MusicStudy';
 import { VocabularyBuilder } from './components/VocabularyBuilder';
-import { Menu, Wifi, WifiOff, Square } from 'lucide-react';
+import { Menu, Wifi, WifiOff, Sun } from 'lucide-react';
 import { AIChatSidebar } from './components/AIChatSidebar';
 import { BottomNav } from './components/BottomNav';
 
@@ -65,19 +65,26 @@ const MainAppContent: React.FC = () => {
     return (
       <div style={{
         display: 'flex',
-        height: '100%',
-        width: '100%',
+        height: '100vh',
+        width: '100vw',
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--bg-primary)',
         color: 'var(--text-secondary)'
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <div className="logo-glow" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'float 2s ease-in-out infinite' }}>
-            <Square size={44} style={{ fill: 'var(--accent)', stroke: 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'spin-sun 3s linear infinite', filter: 'drop-shadow(0 0 20px rgba(245, 158, 11, 0.8))' }}>
+            <Sun size={54} style={{ color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.25)' }} />
           </div>
-          <span style={{ fontSize: '0.9rem', fontWeight: 600, letterSpacing: '0.05em' }}>Carregando...</span>
+          <span style={{ fontSize: '1rem', fontWeight: 800, color: '#f59e0b', letterSpacing: '0.05em' }}>NoClima</span>
         </div>
+        <style>{`
+          @keyframes spin-sun {
+            0% { transform: rotate(0deg) scale(0.95); }
+            50% { transform: rotate(180deg) scale(1.12); }
+            100% { transform: rotate(360deg) scale(0.95); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -139,9 +146,9 @@ const MainAppContent: React.FC = () => {
             <Menu size={24} />
           </button>
           
-          <h1 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Square size={16} style={{ fill: 'var(--accent)', stroke: 'none' }} />
-            <span>Learn<span style={{ color: 'var(--accent)' }}>Chunks</span></span>
+          <h1 style={{ fontSize: '1.2rem', fontWeight: 850, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sun size={20} style={{ color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.25)' }} />
+            <span style={{ color: '#f59e0b' }}>NoClima</span>
           </h1>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

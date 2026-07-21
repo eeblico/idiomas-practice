@@ -19,7 +19,8 @@ import {
   Video,
   Search,
   Filter,
-  Sun
+  Sun,
+  Edit3
 } from 'lucide-react';
 
 interface MacroClima {
@@ -44,6 +45,7 @@ export const IslandsCatalog: React.FC = () => {
     setActiveTab,
     customCategories,
     addCustomCategory,
+    updateCategory,
     deleteCustomCategory
   } = useApp();
 
@@ -55,6 +57,29 @@ export const IslandsCatalog: React.FC = () => {
   const [newIslandName, setNewIslandName] = useState('');
   const [newIslandDesc, setNewIslandDesc] = useState('');
   const [newIslandClima, setNewIslandClima] = useState('flow');
+
+  // Edit/Migrate Island Modal state
+  const [editingIsland, setEditingIsland] = useState<Category | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editClima, setEditClima] = useState('flow');
+
+  const handleOpenEdit = (island: Category, currentClimaId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingIsland(island);
+    setEditName(island.name);
+    const clean = island.description ? island.description.replace(/\[(deepwork|flow|influence|explorer)\]/g, '').trim() : '';
+    setEditDesc(clean);
+    setEditClima(currentClimaId);
+  };
+
+  const handleSaveEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIsland || !editName.trim()) return;
+
+    updateCategory(editingIsland.id, editName.trim(), editDesc.trim(), editClima);
+    setEditingIsland(null);
+  };
 
   useEffect(() => {
     const saved = sessionStorage.getItem('noclima_active_clima');
@@ -664,6 +689,139 @@ export const IslandsCatalog: React.FC = () => {
         </div>
       )}
 
+      {/* 5. MODAL FOR EDITING / MIGRATING AN ISLAND */}
+      {editingIsland && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-card fade-in" style={{ width: '100%', maxWidth: '460px', padding: '24px', borderRadius: 'var(--radius-lg)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit3 size={18} style={{ color: 'var(--accent)' }} /> Configurações / Migrar Ilha
+              </h3>
+              <button 
+                onClick={() => setEditingIsland(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Nome da Ilha / Coleção
+                </label>
+                <input 
+                  type="text"
+                  placeholder="Nome da ilha"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)',
+                    color: 'white',
+                    fontSize: '0.88rem'
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Migrar para o Macro-Clima:
+                </label>
+                <select
+                  value={editClima}
+                  onChange={e => setEditClima(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)',
+                    color: 'white',
+                    fontSize: '0.88rem'
+                  }}
+                >
+                  <option value="deepwork">🧠 Deep Work (Analítico / Negócios)</option>
+                  <option value="flow">🌱 Flow (Identidade / Rotina)</option>
+                  <option value="influence">💬 Influence (Conexão / Social)</option>
+                  <option value="explorer">✈️ Explorer (Lúdico / Viagens)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Descrição / Objetivo
+                </label>
+                <textarea 
+                  rows={3}
+                  placeholder="Ajuste a descrição desta ilha..."
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    resize: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingIsland(null)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontSize: '0.82rem'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent)',
+                    border: 'none',
+                    color: 'white',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontSize: '0.82rem'
+                  }}
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 
@@ -705,20 +863,30 @@ export const IslandsCatalog: React.FC = () => {
             </strong>
           </div>
 
-          {isCustom && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm(`Deseja excluir a ilha "${island.name}"?`)) {
-                  deleteCustomCategory(island.id);
-                }
-              }}
-              style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '2px', opacity: 0.7 }}
-              title="Excluir ilha"
+              onClick={(e) => handleOpenEdit(island, clima.id, e)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', opacity: 0.8 }}
+              title="Editar / Migrar Ilha"
             >
-              <Trash2 size={14} />
+              <Edit3 size={14} />
             </button>
-          )}
+
+            {isCustom && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Deseja excluir a ilha "${island.name}"?`)) {
+                    deleteCustomCategory(island.id);
+                  }
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '2px', opacity: 0.7 }}
+                title="Excluir ilha"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         {cleanDesc && (
