@@ -278,13 +278,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Load guest progress from LocalStorage
+  // Load guest progress & check consecutive daily platform login streak
   useEffect(() => {
     try {
       const stored = localStorage.getItem(LOCAL_GUEST_KEY);
-      if (stored) {
-        setGuestProgress(JSON.parse(stored));
+      let guestData: GuestProgress = stored ? JSON.parse(stored) : { ...DEFAULT_GUEST_PROGRESS };
+
+      // Calculate consecutive daily platform entry streak
+      const todayStr = new Date().toISOString().split('T')[0];
+      const lastLogin = localStorage.getItem('hl_last_login_date');
+      const storedStreak = Number(localStorage.getItem('hl_login_streak') || String(guestData.streak || 0));
+
+      if (!lastLogin) {
+        localStorage.setItem('hl_last_login_date', todayStr);
+        localStorage.setItem('hl_login_streak', '1');
+        guestData.streak = 1;
+      } else {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const lastDate = new Date(lastLogin);
+        lastDate.setHours(0, 0, 0, 0);
+
+        const diffTime = today.getTime() - lastDate.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) {
+          // Same day login: keep current login streak (at least 1)
+          guestData.streak = storedStreak > 0 ? storedStreak : 1;
+        } else if (diffDays === 1) {
+          // Consecutive day login: increment streak!
+          const nextStreak = storedStreak + 1;
+          localStorage.setItem('hl_last_login_date', todayStr);
+          localStorage.setItem('hl_login_streak', String(nextStreak));
+          guestData.streak = nextStreak;
+        } else if (diffDays > 1) {
+          // Missed 1 or more days: RESET STREAK to 1!
+          localStorage.setItem('hl_last_login_date', todayStr);
+          localStorage.setItem('hl_login_streak', '1');
+          guestData.streak = 1;
+        }
       }
+
+      setGuestProgress(guestData);
+      localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(guestData));
+
       const storedLang = localStorage.getItem(LOCAL_LANG_KEY);
       if (storedLang) {
         setTargetLanguageState(storedLang);

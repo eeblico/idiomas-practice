@@ -28,8 +28,76 @@ export const Dashboard: React.FC = () => {
     phrases,
     setActiveIslandId,
     setActiveTab,
-    recentIslandIds
+    recentIslandIds,
+    phraseStars,
+    reviewItems,
+    targetLanguage
   } = useApp();
+
+  // 1. Calculate Today's study time
+  const todayStr = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayTimeSec = React.useMemo(() => {
+    try {
+      const storedDaily = localStorage.getItem(`hl_stats_today_time_sec_${todayStr}`);
+      if (storedDaily) return Number(storedDaily) || 0;
+      
+      // Fallback check overall study counts
+      const counts = localStorage.getItem('hl_study_daily_counts');
+      if (counts) {
+        const parsed = JSON.parse(counts);
+        if (parsed[todayStr]) return (parsed[todayStr] * 45) || 0; // est 45s per item
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }, [todayStr]);
+
+  const todayTimeFormatted = React.useMemo(() => {
+    const hrs = Math.floor(todayTimeSec / 3600);
+    const mins = Math.floor((todayTimeSec % 3600) / 60);
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
+  }, [todayTimeSec]);
+
+  // 2. Calculate Comprehension CEFR Level
+  const targetPhrases = React.useMemo(() => {
+    return (phrases || []).filter(p => p && p.language_id === targetLanguage);
+  }, [phrases, targetLanguage]);
+
+  const comprehensionCount = React.useMemo(() => {
+    return targetPhrases.filter(p => {
+      const star = phraseStars[p.id] || 0;
+      const rev = reviewItems?.[p.id];
+      return star > 0 || rev !== undefined;
+    }).length;
+  }, [targetPhrases, phraseStars, reviewItems]);
+
+  const comprehensionCEFR = React.useMemo(() => {
+    if (comprehensionCount >= 501) return 'C1';
+    if (comprehensionCount >= 251) return 'B2';
+    if (comprehensionCount >= 121) return 'B1';
+    if (comprehensionCount >= 51) return 'A2';
+    if (comprehensionCount >= 11) return 'A1';
+    return 'A0';
+  }, [comprehensionCount]);
+
+  // 3. Calculate Speaking CEFR Level
+  const speakingCount = React.useMemo(() => {
+    return targetPhrases.filter(p => {
+      const star = phraseStars[p.id] || 0;
+      return star >= 4;
+    }).length;
+  }, [targetPhrases, phraseStars]);
+
+  const speakingCEFR = React.useMemo(() => {
+    if (speakingCount >= 251) return 'C1';
+    if (speakingCount >= 126) return 'B2';
+    if (speakingCount >= 61) return 'B1';
+    if (speakingCount >= 26) return 'A2';
+    if (speakingCount >= 6) return 'A1';
+    return 'A0';
+  }, [speakingCount]);
 
   // Get recently studied/visited islands, falling back to first 3 if none
   const getRecentIslands = () => {
@@ -119,7 +187,7 @@ export const Dashboard: React.FC = () => {
           </h2>
         </div>
         
-        {/* Streak counter pill */}
+        {/* Streak counter pill (Consecutive daily platform entries) */}
         {streak > 0 && (
           <div style={{
             background: 'rgba(249, 115, 22, 0.12)',
@@ -145,7 +213,7 @@ export const Dashboard: React.FC = () => {
             <Clock size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">0m</span>
+            <span className="stat-box-value">{todayTimeFormatted}</span>
             <span className="stat-box-label">Hoje</span>
           </div>
         </div>
@@ -155,7 +223,7 @@ export const Dashboard: React.FC = () => {
             <HelpCircle size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">A0</span>
+            <span className="stat-box-value">{comprehensionCEFR}</span>
             <span className="stat-box-label">Compreensão</span>
           </div>
         </div>
@@ -165,7 +233,7 @@ export const Dashboard: React.FC = () => {
             <Volume2 size={20} />
           </div>
           <div className="stat-box-info">
-            <span className="stat-box-value">A0</span>
+            <span className="stat-box-value">{speakingCEFR}</span>
             <span className="stat-box-label">Fala</span>
           </div>
         </div>
