@@ -1297,15 +1297,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? { ...merged, explanation: '' }
         : merged;
 
-      // Replace 'Alex' with 'Jonas' as requested
+      // Replace 'Alex' with 'Jonas' and strip residual '[PT]' prefix
       const sanitizedText = item.text ? item.text.replace(/\bAlex\b/g, 'Jonas') : item.text;
-      const sanitizedTrans = item.translation ? item.translation.replace(/\bAlex\b/g, 'Jonas') : item.translation;
+      let rawTrans = item.translation ? item.translation.replace(/^\[PT\]\s*/i, '').replace(/\bAlex\b/g, 'Jonas').trim() : item.translation;
       const sanitizedExpl = item.explanation ? item.explanation.replace(/\bAlex\b/g, 'Jonas') : item.explanation;
 
       return {
         ...item,
         text: sanitizedText,
-        translation: sanitizedTrans,
+        translation: rawTrans,
         explanation: sanitizedExpl
       };
     });

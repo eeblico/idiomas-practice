@@ -446,14 +446,11 @@ export const IslandsCatalog: React.FC = () => {
               {/* Sub-structures Render */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 
-                {/* 📜 SUB-STRUCTURE 1: STORY (Decks Pessoais / Narrativos) */}
+                {/* Story */}
                 {(activeSubTab === 'all' || activeSubTab === 'story') && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: clima.color, fontSize: '0.85rem', fontWeight: 800, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
-                      <BookOpen size={14} /> 📜 Story — Decks Pessoais e Narrativos
-                    </div>
                     {storyIslands.length === 0 ? (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
                         Nenhuma história narrativa criada neste clima ainda. Use o botão "Nova Ilha Narrativa" para adicionar.
                       </div>
                     ) : (
@@ -464,24 +461,18 @@ export const IslandsCatalog: React.FC = () => {
                   </div>
                 )}
 
-                {/* 🎯 SUB-STRUCTURE 2: CORE (Decks Fixos das Planilhas) */}
+                {/* Core */}
                 {(activeSubTab === 'all' || activeSubTab === 'core') && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: clima.color, fontSize: '0.85rem', fontWeight: 800, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
-                      <Target size={14} /> 🎯 Core — Decks Fixos Essenciais
-                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
                       {coreIslands.map(island => renderIslandCard(island, clima, false))}
                     </div>
                   </div>
                 )}
 
-                {/* 🍿 SUB-STRUCTURE 3: POP LAB (Cultura Pop & Mídia Interelacionada) */}
+                {/* Pop Lab */}
                 {(activeSubTab === 'all' || activeSubTab === 'poplab') && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: clima.color, fontSize: '0.85rem', fontWeight: 800, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
-                      <Film size={14} /> 🍿 Pop Lab — Minerações de Séries, Filmes e Músicas
-                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
                       {poplabIslands.length > 0 ? (
                         poplabIslands.map(island => renderIslandCard(island, clima, false))
