@@ -37,9 +37,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
         {/* Brand logo */}
         <div className="sidebar-logo" style={{ display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: '10px', justifyContent: collapsed ? 'center' : 'space-between', marginBottom: '24px' }}>
           <div style={{ display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: '10px' }}>
-            <Square style={{ fill: 'var(--accent)', stroke: 'none', width: '20px', height: '20px' }} />
+            <Sun size={22} style={{ color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.25)' }} />
             {!collapsed && (
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em' }}>No<span style={{ color: 'var(--accent)' }}>Clima</span></span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 850, letterSpacing: '-0.02em', color: '#f59e0b' }}>NoClima</span>
             )}
           </div>
           {onToggleCollapse && (

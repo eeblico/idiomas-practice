@@ -18,7 +18,8 @@ import {
   BarChart3, 
   Settings as SettingsIcon,
   Zap,
-  ArrowRight
+  ArrowRight,
+  Sun
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -183,7 +184,7 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ fontSize: '1.9rem', fontWeight: 800, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-            Bem-vindo ao <span style={{ color: 'var(--accent)' }}>NoClima</span> 👋
+            Bem-vindo ao <Sun size={26} style={{ color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.25)' }} /> <span style={{ color: '#f59e0b' }}>NoClima</span>
           </h2>
         </div>
         

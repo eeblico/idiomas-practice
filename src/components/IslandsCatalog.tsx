@@ -18,7 +18,8 @@ import {
   Music,
   Video,
   Search,
-  Filter
+  Filter,
+  Sun
 } from 'lucide-react';
 
 interface MacroClima {
@@ -198,7 +199,7 @@ export const IslandsCatalog: React.FC = () => {
       }}>
         <div>
           <h2 style={{ fontSize: '1.8rem', fontFamily: 'var(--font-display)', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            🏝️ Ilhas de Idiomas — <span style={{ color: 'var(--accent)' }}>NoClima</span>
+            🏝️ Ilhas de Idiomas — <Sun size={24} style={{ color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.25)' }} /> <span style={{ color: '#f59e0b' }}>NoClima</span>
           </h2>
         </div>
 
