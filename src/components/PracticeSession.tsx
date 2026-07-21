@@ -5,7 +5,7 @@ import {
   Volume2, Star, ArrowLeft, Play, Pause, Headphones, MessageSquare, 
   Eye, EyeOff, Calendar, Search, Settings, Plus, X, Sparkles, 
   Clock, HelpCircle, ChevronRight, Bookmark, Edit2, FileSpreadsheet, Download, Trash2,
-  Languages, Layers
+  Languages, Layers, Edit3
 } from 'lucide-react';
 
 export const PracticeSession: React.FC = () => {
@@ -30,7 +30,8 @@ export const PracticeSession: React.FC = () => {
     updatePhraseStars,
     streak,
     completedToday,
-    dailyTarget
+    dailyTarget,
+    updateCategory
   } = useApp();
 
   const island = categories.find(c => c.id === activeIslandId);
@@ -73,6 +74,19 @@ export const PracticeSession: React.FC = () => {
   const [revealAllTranslations, setRevealAllTranslations] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addPhraseOpen, setAddPhraseOpen] = useState(false);
+
+  // Island Edit/Migrate states inside Practice Settings modal
+  const [islandEditName, setIslandEditName] = useState('');
+  const [islandEditClima, setIslandEditClima] = useState('flow');
+  const [islandSaveSuccess, setIslandSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (island) {
+      setIslandEditName(island.name);
+      const matchedClima = island.description?.match(/\[(deepwork|flow|influence|explorer)\]/);
+      setIslandEditClima(matchedClima ? matchedClima[1] : 'flow');
+    }
+  }, [island, settingsOpen]);
   
   // Right Stats Tab Toggle ('Hoje' vs 'Total')
   const [statsPeriod, setStatsPeriod] = useState<'today' | 'total'>('today');
@@ -2277,6 +2291,90 @@ export const PracticeSession: React.FC = () => {
             {/* Modal Body */}
             <div className="practice-modal-body">
               
+              {/* Option 0: Edit Island Name & Clima */}
+              {island && (
+                <div className="settings-option-group" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <span className="settings-option-title" style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Edit3 size={15} /> Editar Nome & Migrar Ilha
+                  </span>
+                  
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Nome da Ilha
+                    </label>
+                    <input 
+                      type="text"
+                      value={islandEditName}
+                      onChange={e => setIslandEditName(e.target.value)}
+                      placeholder="Nome da ilha"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border)',
+                        color: 'white',
+                        fontSize: '0.85rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Macro-Clima de Energia (Mudar Ilha de Lugar)
+                    </label>
+                    <select
+                      value={islandEditClima}
+                      onChange={e => setIslandEditClima(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border)',
+                        color: 'white',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      <option value="deepwork">🧠 Deep Work (Analítico / Negócios)</option>
+                      <option value="flow">🌱 Flow (Identidade / Rotina)</option>
+                      <option value="influence">💬 Influence (Conexão / Social)</option>
+                      <option value="explorer">✈️ Explorer (Lúdico / Viagens)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!islandEditName.trim()) return;
+                        const currentDesc = island.description || '';
+                        updateCategory(island.id, islandEditName.trim(), currentDesc, islandEditClima);
+                        setIslandSaveSuccess(true);
+                        setTimeout(() => setIslandSaveSuccess(false), 3000);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        color: '#f59e0b',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: '0.8rem'
+                      }}
+                    >
+                      Salvar Alterações da Ilha
+                    </button>
+                    {islandSaveSuccess && (
+                      <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
+                        ✓ Ilha atualizada com sucesso!
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Option 1: Repetitions */}
               <div className="settings-option-group">
                 <span className="settings-option-title">Repetições por frase</span>
