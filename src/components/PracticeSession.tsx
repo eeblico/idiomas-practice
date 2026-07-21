@@ -5,7 +5,7 @@ import {
   Volume2, Star, ArrowLeft, Play, Pause, Headphones, MessageSquare, 
   Eye, EyeOff, Calendar, Search, Settings, Plus, X, Sparkles, 
   Clock, HelpCircle, ChevronRight, Bookmark, Edit2, FileSpreadsheet, Download, Trash2,
-  Languages, Layers, Edit3
+  Languages, Layers, Edit3, Shuffle
 } from 'lucide-react';
 
 export const PracticeSession: React.FC = () => {
@@ -91,6 +91,35 @@ export const PracticeSession: React.FC = () => {
       setIslandEditSubstructure(matchedSub ? matchedSub[1] : 'core');
     }
   }, [island, settingsOpen]);
+  
+  // Shuffle mode state (Randomizes sentence order when active)
+  const [isShuffleActive, setIsShuffleActive] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(`hl_shuffle_active_${activeIslandId || 'default'}`);
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [shuffleSeed, setShuffleSeed] = useState(0);
+
+  useEffect(() => {
+    if (activeIslandId) {
+      const stored = localStorage.getItem(`hl_shuffle_active_${activeIslandId}`);
+      setIsShuffleActive(stored === 'true');
+    }
+  }, [activeIslandId]);
+
+  const toggleShuffle = () => {
+    setIsShuffleActive(prev => {
+      const next = !prev;
+      if (activeIslandId) {
+        localStorage.setItem(`hl_shuffle_active_${activeIslandId}`, String(next));
+      }
+      setShuffleSeed(s => s + 1);
+      return next;
+    });
+  };
   
   // Right Stats Tab Toggle ('Hoje' vs 'Total')
   const [statsPeriod, setStatsPeriod] = useState<'today' | 'total'>('today');
@@ -232,8 +261,17 @@ export const PracticeSession: React.FC = () => {
       });
     }
 
+    // If shuffle mode is active, apply random shuffle to make audio activation unpredictable
+    if (isShuffleActive && list.length > 1) {
+      list = [...list];
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+    }
+
     return list;
-  }, [phrases, activeIslandId, filterFavorites, searchQuery, sortOrder, favorites]);
+  }, [phrases, activeIslandId, filterFavorites, searchQuery, sortOrder, favorites, isShuffleActive, shuffleSeed]);
 
   // Count the number of lines in batchInput for the visual bullet points margin
   const linesCount = useMemo(() => {
@@ -1329,6 +1367,20 @@ export const PracticeSession: React.FC = () => {
                 </button>
               </div>
 
+              {/* Shuffle button */}
+              <button 
+                className={`btn-icon ${isShuffleActive ? 'active' : ''}`}
+                onClick={toggleShuffle}
+                title={isShuffleActive ? "Desativar ordem aleatória (Voltar à ordem organizada)" : "Embaralhar ordem das frases de modo aleatório"}
+                style={{
+                  color: isShuffleActive ? '#f59e0b' : 'var(--text-muted)',
+                  borderColor: isShuffleActive ? 'rgba(245, 158, 11, 0.3)' : 'transparent',
+                  background: isShuffleActive ? 'rgba(245, 158, 11, 0.12)' : 'transparent'
+                }}
+              >
+                <Shuffle size={16} />
+              </button>
+
               {/* Settings gear */}
               <button 
                 className="btn-icon" 
@@ -2401,6 +2453,34 @@ export const PracticeSession: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Option 0.5: Shuffle Mode Toggle */}
+              <div className="settings-option-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: '16px' }}>
+                <div>
+                  <span className="settings-option-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                    <Shuffle size={15} style={{ color: isShuffleActive ? '#f59e0b' : 'var(--text-muted)' }} /> Embaralhar Sentenças Aleatoriamente
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                    {isShuffleActive ? 'Ordem aleatória ativada (Áudios imprevisíveis)' : 'Ordem organizada padrão do usuário'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleShuffle}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: isShuffleActive ? 'rgba(245, 158, 11, 0.2)' : 'var(--bg-tertiary)',
+                    color: isShuffleActive ? '#f59e0b' : 'var(--text-secondary)',
+                    border: isShuffleActive ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid var(--border)'
+                  }}
+                >
+                  {isShuffleActive ? '🔀 Ativado' : 'Desativado'}
+                </button>
+              </div>
 
               {/* Option 1: Repetitions */}
               <div className="settings-option-group">
