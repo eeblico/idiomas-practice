@@ -1291,14 +1291,16 @@ export const PracticeSession: React.FC = () => {
           </div>
 
           {/* Sub-controls Toolbar */}
-          <div style={{
+          <div className="practice-toolbar" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
-            padding: '10px 16px'
+            padding: '10px 16px',
+            flexWrap: 'wrap',
+            gap: '8px'
           }}>
             <div style={{ display: 'flex', gap: '8px' }}>
               {/* Filter Favorites */}
