@@ -10,15 +10,18 @@
     "cap:sync": "cap sync",
     "cap:add-android": "cap add android",
     "cap:open": "cap open android",
-    "worker": "node scripts/queue-worker.js"
+    "worker": "node scripts/queue-worker.js",
+    "audio-generator": "npx serve audio-generator -p 8080"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/core": "^6.0.0",
     "@supabase/supabase-js": "^2.43.4",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.395.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp, AVAILABLE_LANGUAGES } from '../context/AppContext';
 import { Auth } from './Auth';
-import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X } from 'lucide-react';
+import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X, Download, Upload, Share2, FileText } from 'lucide-react';
 import { Guide } from './Guide';
 
 export const Settings: React.FC = () => {
@@ -58,6 +58,65 @@ export const Settings: React.FC = () => {
       alert('Dados locais limpos com sucesso. Recarregando a página.');
       window.location.reload();
     }
+  };
+
+  const handleExportCustomData = () => {
+    try {
+      const exportObj = {
+        customPhrases: JSON.parse(localStorage.getItem('hl_custom_phrases') || '[]'),
+        customCategories: JSON.parse(localStorage.getItem('hl_custom_categories') || '[]'),
+        categoryOverrides: JSON.parse(localStorage.getItem('hl_category_overrides') || '{}'),
+        phraseOverrides: JSON.parse(localStorage.getItem('hl_phrase_overrides') || '{}')
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `noclima_sentencas_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (e) {
+      alert('Erro ao exportar sentenças personalizadas.');
+    }
+  };
+
+  const handleImportCustomData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        let importedCount = 0;
+
+        if (imported.customPhrases && Array.isArray(imported.customPhrases)) {
+          const currentCustom = JSON.parse(localStorage.getItem('hl_custom_phrases') || '[]');
+          const mergedPhrases = [...currentCustom, ...imported.customPhrases.filter((p: any) => !currentCustom.some((cp: any) => cp.id === p.id))];
+          localStorage.setItem('hl_custom_phrases', JSON.stringify(mergedPhrases));
+          importedCount += imported.customPhrases.length;
+        }
+
+        if (imported.customCategories && Array.isArray(imported.customCategories)) {
+          const currentCats = JSON.parse(localStorage.getItem('hl_custom_categories') || '[]');
+          const mergedCats = [...currentCats, ...imported.customCategories.filter((c: any) => !currentCats.some((cc: any) => cc.id === c.id))];
+          localStorage.setItem('hl_custom_categories', JSON.stringify(mergedCats));
+        }
+
+        if (imported.categoryOverrides) {
+          const currentOverrides = JSON.parse(localStorage.getItem('hl_category_overrides') || '{}');
+          const mergedOverrides = { ...currentOverrides, ...imported.categoryOverrides };
+          localStorage.setItem('hl_category_overrides', JSON.stringify(mergedOverrides));
+        }
+
+        alert(`✓ ${importedCount} sentenças e ilhas personalizadas importadas com sucesso! Recarregando a página...`);
+        window.location.reload();
+      } catch (err) {
+        alert('Erro ao ler arquivo de backup. Certifique-se de selecionar um arquivo JSON válido.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -288,6 +347,62 @@ export const Settings: React.FC = () => {
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.3 }}>
             Selecione o modelo de IA para o Chat Global. O Nemotron exibe o processo de raciocínio lógico no próprio balão de mensagens. Chaves e modelos são pré-configurados no início.
           </p>
+        </div>
+      </div>
+
+      {/* Backup & Import Custom Sentences */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
+          <Share2 size={18} /> Sincronizar / Exportar Minhas Sentenças & Ilhas
+        </h3>
+        
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+          Exporte o arquivo das sentenças e ilhas que você adicionou ou editou no PC para importá-las instantaneamente no celular ou em qualquer outro dispositivo.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '4px' }}>
+          <button 
+            type="button"
+            className="btn" 
+            onClick={handleExportCustomData} 
+            style={{ 
+              background: 'rgba(245, 158, 11, 0.15)', 
+              color: '#f59e0b', 
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <Download size={15} /> Exportar Backup (JSON)
+          </button>
+
+          <label 
+            className="btn" 
+            style={{ 
+              background: 'rgba(16, 185, 129, 0.15)', 
+              color: '#10b981', 
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <Upload size={15} /> Importar no Celular
+            <input 
+              type="file" 
+              accept=".json" 
+              onChange={handleImportCustomData} 
+              style={{ display: 'none' }} 
+            />
+          </label>
         </div>
       </div>
 

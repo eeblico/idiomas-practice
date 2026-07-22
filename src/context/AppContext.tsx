@@ -2,9 +2,24 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import { supabase } from '../services/supabase';
 import { syncService } from '../services/sync';
 import { calculateSM2, calculateFibonacciSpacing } from '../services/sm2';
-import seedData from '../data/seedData.json';
 import vocabPlanilha from '../data/vocabPlanilha.json';
 import { staticVocabulary } from '../data/vocabularyData';
+
+// Dynamic loader for per-language seed JSON files to optimize mobile performance
+const getSeedDataForLang = async (lang: string) => {
+  try {
+    switch (lang) {
+      case 'es': return (await import('../data/seedData_es.json')).default;
+      case 'fr': return (await import('../data/seedData_fr.json')).default;
+      case 'de': return (await import('../data/seedData_de.json')).default;
+      case 'it': return (await import('../data/seedData_it.json')).default;
+      case 'zh': return (await import('../data/seedData_zh.json')).default;
+      default: return (await import('../data/seedData_en.json')).default;
+    }
+  } catch {
+    return (await import('../data/seedData_en.json')).default;
+  }
+};
 
 // Types
 export interface Language {
@@ -351,15 +366,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Load recent islands whenever target language changes
+  // Load recent islands & seed catalog whenever target language changes
   useEffect(() => {
     try {
       const langKey = `hl_recent_islands_${targetLanguage}`;
       const storedRecent = localStorage.getItem(langKey);
       setRecentIslandIds(storedRecent ? JSON.parse(storedRecent) : []);
     } catch (e) {
-      setRecentIslandIds([]);
+      console.error('Error updating recent islands for language:', e);
     }
+    refreshCatalog();
   }, [targetLanguage]);
 
   // Save guest progress helper
@@ -371,10 +387,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Fetch catalog (languages, islands/categories, phrases)
   const refreshCatalog = async () => {
     try {
+      const seedData = await getSeedDataForLang(targetLanguage);
+
       // 1. Fetch Languages
       const { data: langData } = await supabase.from('languages').select('*');
       if (langData && langData.length > 0) {
-        // Merge DB languages with our canonical list so all 7 are always available
+        // Merge DB languages with our canonical list so all are always available
         const dbIds = new Set(langData.map((l: Language) => l.id));
         const extra = AVAILABLE_LANGUAGES.filter(l => !dbIds.has(l.id));
         setLanguages([...langData, ...extra]);
@@ -411,6 +429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) {
       console.warn('Error fetching Supabase catalog. Offline or database not configured yet.', err);
       
+      const seedData = await getSeedDataForLang(targetLanguage);
       const setCategoriesWithOverride = (cats: Category[]) => {
         const overridden = cats.map(c => ({
           ...c,
@@ -419,7 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCategories(overridden);
       };
 
-      // Local seeds fallback — always expose all 7 languages
+      // Local seeds fallback — always expose selected language
       setLanguages(AVAILABLE_LANGUAGES);
       setCategoriesWithOverride(seedData.categories);
       setPhrases(seedData.phrases as Phrase[]);
