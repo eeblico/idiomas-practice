@@ -304,19 +304,19 @@ export const MusicStudy: React.FC = () => {
   useEffect(() => {
     const loadSongs = () => {
       let stored = localStorage.getItem('hl_custom_songs');
-      if (stored === null) {
-        // Initial setup: save preloaded songs to localStorage so they are editable
-        localStorage.setItem('hl_custom_songs', JSON.stringify(PRELOADED_SONGS));
-        stored = JSON.stringify(PRELOADED_SONGS);
+      let custom: Song[] = [];
+      try {
+        custom = stored ? JSON.parse(stored) : [];
+      } catch {
+        custom = [];
       }
-      let custom: Song[] = JSON.parse(stored);
-      // Ensure 'preloaded-en-yesterday' is completely removed if present in custom database
-      const cleaned = custom.filter(s => s.id !== 'preloaded-en-yesterday');
-      if (cleaned.length !== custom.length) {
-        localStorage.setItem('hl_custom_songs', JSON.stringify(cleaned));
-        custom = cleaned;
-      }
-      setSongs(custom);
+      
+      // Ensure preloaded songs are always available and merged
+      const customIds = new Set(custom.map(s => s.id));
+      const missingPreloaded = PRELOADED_SONGS.filter(s => !customIds.has(s.id));
+      const allMerged = [...custom, ...missingPreloaded].filter(s => s.id !== 'preloaded-en-yesterday');
+      
+      setSongs(allMerged);
     };
     loadSongs();
   }, [addModalOpen]);

@@ -1781,7 +1781,9 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
 
   // Combine preloaded and custom imported lessons
   const allLessons = useMemo(() => {
-    return customLessons;
+    const customIds = new Set(customLessons.map(l => l.id));
+    const preloadedFiltered = PRELOADED_LESSONS.filter(l => !customIds.has(l.id));
+    return [...customLessons, ...preloadedFiltered];
   }, [customLessons]);
 
   const handleDeleteCustomLesson = async (lessonId: string, e: React.MouseEvent) => {
