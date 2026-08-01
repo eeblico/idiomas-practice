@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp, AVAILABLE_LANGUAGES } from '../context/AppContext';
 import { Auth } from './Auth';
-import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X, Download, Upload, Share2, FileText } from 'lucide-react';
+import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X, Download, Upload, Share2, FileText, Cloud, Copy, Smartphone, RefreshCw } from 'lucide-react';
 import { Guide } from './Guide';
 
 export const Settings: React.FC = () => {
@@ -13,8 +13,14 @@ export const Settings: React.FC = () => {
     dailyTarget,
     refreshCatalog,
     reviewAlgorithm,
-    setReviewAlgorithm
+    setReviewAlgorithm,
+    cloudSyncCode,
+    cloudSyncStatus,
+    connectCloudSyncCode,
+    forceSyncCloud
   } = useApp();
+
+  const [inputSyncCode, setInputSyncCode] = useState('');
 
   const [autoplay, setAutoplay] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
@@ -348,6 +354,92 @@ export const Settings: React.FC = () => {
             Selecione o modelo de IA para o Chat Global. O Nemotron exibe o processo de raciocínio lógico no próprio balão de mensagens. Chaves e modelos são pré-configurados no início.
           </p>
         </div>
+      </div>
+
+      {/* Supabase Cloud Multi-Device Sync Card */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid rgba(124, 58, 237, 0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)' }}>
+            <Cloud size={20} /> Sincronização em Nuvem (Multi-Dispositivo)
+          </h3>
+          <span style={{
+            fontSize: '0.75rem',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-full)',
+            background: cloudSyncStatus === 'synced' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+            color: cloudSyncStatus === 'synced' ? '#10b981' : '#f59e0b',
+            border: cloudSyncStatus === 'synced' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+            fontWeight: 700
+          }}>
+            {cloudSyncStatus === 'synced' ? '☁️ Conectado e Sincronizado' : '🔄 Sincronizando...'}
+          </span>
+        </div>
+
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+          Todas as suas sentenças personalizadas, edições de nomes de ilhas, clima, aulas e progresso são salvas na nuvem do <strong>Supabase DB</strong> para permanecerem disponíveis em qualquer navegador ou celular.
+        </p>
+
+        {/* Sync Code Box */}
+        <div style={{ background: 'var(--bg-tertiary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Seu Código de Conexão (PC & Celular):</span>
+            <button 
+              type="button" 
+              className="btn-icon" 
+              onClick={() => {
+                navigator.clipboard.writeText(cloudSyncCode);
+                alert(`Código ${cloudSyncCode} copiado para a área de transferência!`);
+              }} 
+              title="Copiar código de sincronização"
+            >
+              <Copy size={15} />
+            </button>
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '0.15em', color: 'var(--accent)', fontFamily: 'monospace' }}>
+            {cloudSyncCode}
+          </div>
+        </div>
+
+        {/* Input to pair another device */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            📱 Conectar Novo Celular ou Outro Navegador:
+          </span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input 
+              type="text" 
+              placeholder="Cole o Código (ex: HL-9824A7)"
+              value={inputSyncCode}
+              onChange={(e) => setInputSyncCode(e.target.value.toUpperCase())}
+              style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', textTransform: 'uppercase', fontSize: '0.85rem' }}
+            />
+            <button 
+              type="button"
+              className="btn btn-primary"
+              onClick={async () => {
+                if (!inputSyncCode.trim()) return;
+                const success = await connectCloudSyncCode(inputSyncCode);
+                if (success) {
+                  alert(`✓ Dispositivo conectado com sucesso ao código ${inputSyncCode}! Todo o seu acervo foi sincronizado.`);
+                } else {
+                  alert(`Não foi possível encontrar dados para o código ${inputSyncCode}. Verifique se digitou corretamente.`);
+                }
+              }}
+              style={{ fontSize: '0.8rem', padding: '8px 16px' }}
+            >
+              Conectar <Smartphone size={15} />
+            </button>
+          </div>
+        </div>
+
+        <button 
+          type="button"
+          className="btn"
+          onClick={forceSyncCloud}
+          style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '0.75rem', gap: '6px' }}
+        >
+          <RefreshCw size={14} /> Forçar Sincronização Agora
+        </button>
       </div>
 
       {/* Backup & Import Custom Sentences */}

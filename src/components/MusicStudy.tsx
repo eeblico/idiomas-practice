@@ -246,6 +246,7 @@ export const MusicStudy: React.FC = () => {
   const [showReplayDropdown, setShowReplayDropdown] = useState<boolean>(false);
   const [showTargetOnly, setShowTargetOnly] = useState(false);
   const [showTranslationOnly, setShowTranslationOnly] = useState(false);
+  const [revealAllTranslations, setRevealAllTranslations] = useState(false);
   const [revealedCards, setRevealedCards] = useState<Record<string, boolean>>({});
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -1414,6 +1415,24 @@ export const MusicStudy: React.FC = () => {
                           title="Apenas tradução"
                         >
                           <MessageSquare size={14} />
+                        </button>
+
+                        {/* Toggle reveal/hide all line translations */}
+                        <button 
+                          className={`btn-icon ${revealAllTranslations ? 'active' : ''}`}
+                          style={{ width: '32px', height: '32px' }}
+                          onClick={() => {
+                            const nextVal = !revealAllTranslations;
+                            setRevealAllTranslations(nextVal);
+                            const updated: Record<string, boolean> = {};
+                            cleanSongLines.forEach(line => {
+                              updated[`${activeSong?.id}-${line.originalIdx}`] = nextVal;
+                            });
+                            setRevealedCards(updated);
+                          }}
+                          title={revealAllTranslations ? "Ocultar todas as traduções da música" : "Revelar todas as traduções da música"}
+                        >
+                          {revealAllTranslations ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
 
                         <button 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { syncService } from '../services/sync';
+import { cloudSyncService } from '../services/cloudSync';
 import { calculateSM2, calculateFibonacciSpacing } from '../services/sm2';
 import vocabPlanilha from '../data/vocabPlanilha.json';
 import { staticVocabulary } from '../data/vocabularyData';
@@ -127,6 +128,10 @@ interface AppContextType {
   addCustomCategory: (name: string, description: string) => Promise<string>;
   updateCategory: (categoryId: string, name: string, description: string, clima: string, substructure?: string) => Promise<void>;
   deleteCustomCategory: (categoryId: string) => Promise<void>;
+  cloudSyncCode: string;
+  cloudSyncStatus: 'synced' | 'syncing' | 'offline';
+  connectCloudSyncCode: (code: string) => Promise<boolean>;
+  forceSyncCloud: () => Promise<void>;
   recentIslandIds: string[];
 }
 
@@ -364,6 +369,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.error('Error loading guest progress / custom phrases:', e);
     }
+  }, []);
+
+  // Cloud Sync state & automatic background pull
+  const [cloudSyncCode, setCloudSyncCode] = useState<string>(() => cloudSyncService.getSyncCode());
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+
+  const forceSyncCloud = async () => {
+    setCloudSyncStatus('syncing');
+    const ok = await cloudSyncService.pushToCloud({
+      customPhrases,
+      customCategories,
+      guestProgress
+    });
+    setCloudSyncStatus(ok ? 'synced' : 'offline');
+  };
+
+  const connectCloudSyncCode = async (code: string): Promise<boolean> => {
+    setCloudSyncStatus('syncing');
+    const cleanCode = cloudSyncService.setSyncCode(code);
+    setCloudSyncCode(cleanCode);
+    const cloudData = await cloudSyncService.pullFromCloud(cleanCode);
+    if (cloudData) {
+      if (cloudData.customPhrases) {
+        setCustomPhrases(cloudData.customPhrases);
+        localStorage.setItem('hl_custom_phrases', JSON.stringify(cloudData.customPhrases));
+      }
+      if (cloudData.customCategories) {
+        setCustomCategories(cloudData.customCategories);
+        localStorage.setItem('hl_custom_categories', JSON.stringify(cloudData.customCategories));
+      }
+      if (cloudData.categoryOverrides) {
+        localStorage.setItem('hl_category_overrides', JSON.stringify(cloudData.categoryOverrides));
+      }
+      if (cloudData.phraseOverrides) {
+        localStorage.setItem('hl_phrase_overrides', JSON.stringify(cloudData.phraseOverrides));
+      }
+      if (cloudData.customLessons) {
+        localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
+      }
+      if (cloudData.customSongs) {
+        localStorage.setItem('hl_custom_songs', JSON.stringify(cloudData.customSongs));
+      }
+      if (cloudData.deletedPhraseIds) {
+        localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
+      }
+      if (cloudData.guestProgress && Object.keys(cloudData.guestProgress).length > 0) {
+        setGuestProgress(cloudData.guestProgress);
+        localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(cloudData.guestProgress));
+      }
+      setCloudSyncStatus('synced');
+      refreshCatalog();
+      return true;
+    }
+    setCloudSyncStatus('synced');
+    return false;
+  };
+
+  // Pull latest content from Supabase Cloud on load
+  useEffect(() => {
+    const pullCloudOnLoad = async () => {
+      setCloudSyncStatus('syncing');
+      const cloudData = await cloudSyncService.pullFromCloud();
+      if (cloudData) {
+        if (cloudData.customPhrases && cloudData.customPhrases.length > 0) {
+          setCustomPhrases(cloudData.customPhrases);
+          localStorage.setItem('hl_custom_phrases', JSON.stringify(cloudData.customPhrases));
+        }
+        if (cloudData.customCategories && cloudData.customCategories.length > 0) {
+          setCustomCategories(cloudData.customCategories);
+          localStorage.setItem('hl_custom_categories', JSON.stringify(cloudData.customCategories));
+        }
+        if (cloudData.categoryOverrides && Object.keys(cloudData.categoryOverrides).length > 0) {
+          localStorage.setItem('hl_category_overrides', JSON.stringify(cloudData.categoryOverrides));
+        }
+        if (cloudData.phraseOverrides && Object.keys(cloudData.phraseOverrides).length > 0) {
+          localStorage.setItem('hl_phrase_overrides', JSON.stringify(cloudData.phraseOverrides));
+        }
+        if (cloudData.customLessons && cloudData.customLessons.length > 0) {
+          localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
+        }
+        if (cloudData.customSongs && cloudData.customSongs.length > 0) {
+          localStorage.setItem('hl_custom_songs', JSON.stringify(cloudData.customSongs));
+        }
+        if (cloudData.deletedPhraseIds && cloudData.deletedPhraseIds.length > 0) {
+          localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
+        }
+        if (cloudData.guestProgress && Object.keys(cloudData.guestProgress).length > 0) {
+          setGuestProgress(prev => ({ ...prev, ...cloudData.guestProgress }));
+          localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(cloudData.guestProgress));
+        }
+        setCloudSyncStatus('synced');
+      } else {
+        // Push initial local state to cloud if empty
+        cloudSyncService.pushToCloud({
+          customPhrases,
+          customCategories,
+          guestProgress
+        });
+        setCloudSyncStatus('synced');
+      }
+    };
+    pullCloudOnLoad();
   }, []);
 
   // Load recent islands & seed catalog whenever target language changes
@@ -882,6 +989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = [...customPhrases, newPhrase];
     setCustomPhrases(nextCustom);
     localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+    cloudSyncService.pushToCloud({ customPhrases: nextCustom });
 
     // 2. Try to save to Supabase if admin
     const isAdmin = user?.email === 'admin@hyperlingua.app' || user?.user_metadata?.role === 'admin';
@@ -1152,6 +1260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = [...customCategories, newCategory];
     setCustomCategories(nextCustom);
     localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustom));
+    cloudSyncService.pushToCloud({ customCategories: nextCustom });
     return newCategory.id;
   };
 
@@ -1161,11 +1270,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const formattedDesc = `${cleanDesc} [${clima}] ${subTag}`.trim();
 
     // 1. Update custom categories if custom
+    let nextCustomCats = customCategories;
     const isCustom = customCategories.some(c => c.id === categoryId);
     if (isCustom) {
-      const nextCustom = customCategories.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c);
-      setCustomCategories(nextCustom);
-      localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustom));
+      nextCustomCats = customCategories.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c);
+      setCustomCategories(nextCustomCats);
+      localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustomCats));
     }
 
     // 2. Persist override locally for built-in categories
@@ -1176,6 +1286,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 3. Update categories state
     setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c));
+
+    // 4. Push all changes to Supabase Cloud DB
+    cloudSyncService.pushToCloud({
+      customCategories: nextCustomCats,
+      categoryOverrides: overrides
+    });
   };
 
   const deleteCustomCategory = async (categoryId: string) => {
@@ -1190,6 +1306,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeIslandId === categoryId) {
       setActiveIslandId(null);
     }
+
+    cloudSyncService.pushToCloud({
+      customCategories: nextCustomCats,
+      customPhrases: nextCustomPhrases
+    });
   };
 
   // Filter categories by selected language and append default shadowing category
@@ -1435,6 +1556,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCustomCategory,
         updateCategory,
         deleteCustomCategory,
+        cloudSyncCode,
+        cloudSyncStatus,
+        connectCloudSyncCode,
+        forceSyncCloud,
         recentIslandIds
       }}
     >
