@@ -18,7 +18,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
     user,
     reviewsDueCount,
     theme,
-    toggleTheme
+    toggleTheme,
+    cloudSyncCode
   } = useApp();
 
   const [langPickerOpen, setLangPickerOpen] = useState(false);
@@ -298,9 +299,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
         )}
       </div>
 
+      {/* Cloud Sync Status Button */}
+      {!collapsed && (
+        <div style={{ padding: '12px 16px 0 16px', borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={() => handleNav('settings')}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              background: 'rgba(124, 58, 237, 0.1)',
+              color: 'var(--accent)',
+              border: '1px solid rgba(124, 58, 237, 0.25)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer'
+            }}
+            title="Sincronizar entre celular e navegadores"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>☁️ Sincronizar</span>
+              <span style={{ fontSize: '0.7rem', opacity: 0.8, fontFamily: 'monospace' }}>{cloudSyncCode}</span>
+            </div>
+            <span style={{ fontSize: '0.7rem', textDecoration: 'underline' }}>Conectar</span>
+          </button>
+        </div>
+      )}
+
       {/* Theme Toggle Button at Sidebar bottom */}
       {!collapsed && (
-        <div style={{ padding: '16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ padding: '12px 16px 16px 16px', display: 'flex', justifyContent: 'center' }}>
           <button
             onClick={() => toggleTheme()}
             className="settings-btn"

@@ -489,6 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveGuestProgress = (updated: GuestProgress) => {
     setGuestProgress(updated);
     localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(updated));
+    cloudSyncService.pushToCloud({ guestProgress: updated });
   };
 
   // Fetch catalog (languages, islands/categories, phrases)

@@ -131,6 +131,32 @@ export const cloudSyncService = {
         };
       }
 
+      // 3. Fallback for new browser/device: fetch latest active cloud session if none for exact code
+      if (!targetCode) {
+        const { data: latestData } = await supabase
+          .from('user_sync_data')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestData && latestData.data_json) {
+          localStorage.setItem(SYNC_CODE_KEY, latestData.sync_code);
+          return {
+            sync_code: latestData.sync_code,
+            customPhrases: latestData.data_json.customPhrases || [],
+            customCategories: latestData.data_json.customCategories || [],
+            categoryOverrides: latestData.data_json.categoryOverrides || {},
+            phraseOverrides: latestData.data_json.phraseOverrides || {},
+            customLessons: latestData.data_json.customLessons || [],
+            customSongs: latestData.data_json.customSongs || [],
+            deletedPhraseIds: latestData.data_json.deletedPhraseIds || [],
+            guestProgress: latestData.data_json.guestProgress || {},
+            updated_at: latestData.updated_at || new Date().toISOString()
+          };
+        }
+      }
+
       return null;
     } catch (err) {
       console.warn('Could not pull from Supabase Cloud:', err);

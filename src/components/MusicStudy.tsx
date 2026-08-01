@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { cloudSyncService } from '../services/cloudSync';
 import { 
   Music, Plus, Trash2, ArrowLeft, CheckCircle, 
   HelpCircle, X, RotateCcw, Youtube, Languages, Eye, EyeOff, Info,
@@ -301,15 +302,24 @@ export const MusicStudy: React.FC = () => {
     localStorage.setItem('hl_music_infinite_loop', String(val));
   };
 
-  // --- Load Songs ---
+  // --- Load Songs & Cloud Sync ---
   useEffect(() => {
-    const loadSongs = () => {
+    const loadSongs = async () => {
       let stored = localStorage.getItem('hl_custom_songs');
       let custom: Song[] = [];
       try {
         custom = stored ? JSON.parse(stored) : [];
       } catch {
         custom = [];
+      }
+
+      // If local is empty, attempt pulling from Cloud DB
+      if (custom.length === 0) {
+        const cloudData = await cloudSyncService.pullFromCloud();
+        if (cloudData && cloudData.customSongs && cloudData.customSongs.length > 0) {
+          custom = cloudData.customSongs;
+          localStorage.setItem('hl_custom_songs', JSON.stringify(custom));
+        }
       }
       
       // Ensure preloaded songs are always available and merged
@@ -319,7 +329,14 @@ export const MusicStudy: React.FC = () => {
       
       setSongs(allMerged);
     };
+
     loadSongs();
+    window.addEventListener('focus', loadSongs);
+    window.addEventListener('storage', loadSongs);
+    return () => {
+      window.removeEventListener('focus', loadSongs);
+      window.removeEventListener('storage', loadSongs);
+    };
   }, [addModalOpen]);
 
   // Filtered catalog by current language
@@ -721,11 +738,12 @@ export const MusicStudy: React.FC = () => {
     // Update state
     setActiveSong(updatedSong);
 
-    // Save custom songs to localStorage
+    // Save custom songs to localStorage & Cloud DB
     const stored = localStorage.getItem('hl_custom_songs');
     const custom: Song[] = stored ? JSON.parse(stored) : [];
     const updatedCustom = custom.map(s => s.id === activeSong.id ? updatedSong : s);
     localStorage.setItem('hl_custom_songs', JSON.stringify(updatedCustom));
+    cloudSyncService.pushToCloud({ customSongs: updatedCustom });
   };
 
   // --- Game 1: Prepare Cloze Test ---
@@ -936,6 +954,7 @@ export const MusicStudy: React.FC = () => {
         return s;
       });
       localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+      cloudSyncService.pushToCloud({ customSongs: updated });
 
       // Update activeSong state if it's the one being edited
       if (activeSong && activeSong.id === editingSongId) {
@@ -969,6 +988,7 @@ export const MusicStudy: React.FC = () => {
       const custom: Song[] = stored ? JSON.parse(stored) : [];
       const updated = [newSong, ...custom];
       localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+      cloudSyncService.pushToCloud({ customSongs: updated });
 
       handleCloseAddModal();
       alert(`Música "${newSong.title}" adicionada com sucesso!`);
@@ -983,6 +1003,7 @@ export const MusicStudy: React.FC = () => {
     const custom: Song[] = stored ? JSON.parse(stored) : [];
     const updated = custom.filter(s => s.id !== songId);
     localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+    cloudSyncService.pushToCloud({ customSongs: updated });
     setSongs(prev => prev.filter(s => s.id !== songId));
 
     if (activeSong?.id === songId) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../services/supabase';
+import { cloudSyncService } from '../services/cloudSync';
 import { 
   Video, Upload, Link2, Play, Pause, RotateCcw, 
   ChevronRight, ChevronLeft, Repeat, Volume2, Mic, Info, Star, Bookmark, Share2, 
@@ -1331,6 +1332,7 @@ export const MediaStudy: React.FC = () => {
       const nextCustomLessons = [newLesson, ...customLessons];
       setCustomLessons(nextCustomLessons);
       localStorage.setItem('hl_custom_lessons', JSON.stringify(nextCustomLessons));
+      cloudSyncService.pushToCloud({ customLessons: nextCustomLessons });
 
       setActiveLesson(newLesson);
       setImportFormOpen(false);
@@ -1420,6 +1422,7 @@ export const MediaStudy: React.FC = () => {
 
       setCustomLessons(nextCustomLessons);
       localStorage.setItem('hl_custom_lessons', JSON.stringify(nextCustomLessons));
+      cloudSyncService.pushToCloud({ customLessons: nextCustomLessons });
 
       if (existingIdx !== -1) {
         setActiveLesson(updatedLesson);
