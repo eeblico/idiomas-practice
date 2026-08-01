@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { supabase } from '../services/supabase';
-import { Mail, Lock, User, LogIn, ArrowRight, UserPlus } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
+import { Mail, Lock, User, LogIn, ArrowRight, UserPlus, Key, Globe, Check } from 'lucide-react';
 
 interface AuthProps {
   onSuccess: () => void;
@@ -15,7 +15,29 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Custom Supabase Config fields
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => localStorage.getItem('hl_supabase_url') || '');
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => localStorage.getItem('hl_supabase_anon_key') || '');
+  const [showConfig, setShowConfig] = useState(() => !isSupabaseConfigured());
+
+  const handleSaveSupabaseConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabaseUrlInput.trim() || !supabaseKeyInput.trim()) {
+      setError('Por favor, insira a URL e a Chave Anon do seu projeto Supabase.');
+      return;
+    }
+    localStorage.setItem('hl_supabase_url', supabaseUrlInput.trim());
+    localStorage.setItem('hl_supabase_anon_key', supabaseKeyInput.trim());
+    alert('✓ Credenciais do Supabase salvas com sucesso! Recarregando para conectar...');
+    window.location.reload();
+  };
+
   const handleGoogleLogin = async () => {
+    if (!isSupabaseConfigured()) {
+      setShowConfig(true);
+      setError('Para fazer login, insira a URL e a Chave do seu projeto Supabase abaixo.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -35,6 +57,13 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!isSupabaseConfigured()) {
+      setShowConfig(true);
+      setError('Para fazer login, insira a URL e a Chave do seu projeto Supabase abaixo.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -78,6 +107,49 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
           {isSignUp ? 'Crie sua conta para sincronizar seu progresso.' : 'Entre para retomar seu aprendizado.'}
         </p>
       </div>
+
+      {showConfig && (
+        <form onSubmit={handleSaveSupabaseConfig} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid rgba(245, 158, 11, 0.35)', background: 'rgba(245, 158, 11, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
+            <Key size={18} />
+            <strong style={{ fontSize: '0.95rem' }}>Configurar Conexão do Supabase</strong>
+          </div>
+
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+            Insira a <strong>URL do Projeto</strong> e a <strong>Chave Anon</strong> do seu Supabase para conectar seu login e banco de dados:
+          </p>
+
+          <div className="form-group">
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>VITE_SUPABASE_URL</label>
+            <input
+              type="text"
+              required
+              className="input-text"
+              style={{ width: '100%', fontSize: '0.8rem' }}
+              placeholder="https://seu-projeto.supabase.co"
+              value={supabaseUrlInput}
+              onChange={(e) => setSupabaseUrlInput(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>VITE_SUPABASE_ANON_KEY</label>
+            <input
+              type="password"
+              required
+              className="input-text"
+              style={{ width: '100%', fontSize: '0.8rem' }}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+              value={supabaseKeyInput}
+              onChange={(e) => setSupabaseKeyInput(e.target.value)}
+            />
+          </div>
+
+          <button type="submit" className="btn" style={{ background: '#f59e0b', color: 'black', fontWeight: 800, fontSize: '0.85rem' }}>
+            Salvar e Conectar Supabase <Check size={16} />
+          </button>
+        </form>
+      )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="glass-card">
         {error && (
