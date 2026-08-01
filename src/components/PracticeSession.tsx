@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp, Phrase } from '../context/AppContext';
 import { supabase } from '../services/supabase';
+import { audioCacheService } from '../services/audioCache';
 import { 
   Volume2, Star, ArrowLeft, Play, Pause, Headphones, MessageSquare, 
   Eye, EyeOff, Calendar, Search, Settings, Plus, X, Sparkles, 
@@ -350,7 +351,21 @@ export const PracticeSession: React.FC = () => {
     activeUtteranceRef.current = null;
   };
 
-  // Resolve audio url from Supabase or Google Speech TTS stream
+  // Resolve audio url from Supabase or IndexedDB Cache / Stream for 100% Offline Mobile Playback
+  const getPlayableAudioUrl = async (phrase: Phrase): Promise<string> => {
+    if (phrase.audio_url) {
+      if (phrase.audio_url.startsWith('http')) {
+        if (phrase.audio_url.startsWith('https://audio.hyperlingua.app')) {
+          return phrase.audio_url.replace('https://audio.hyperlingua.app', '/audio-proxy');
+        }
+        return phrase.audio_url;
+      }
+      const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+    return await audioCacheService.getPlayableAudio(phrase.id, phrase.text, phrase.language_id);
+  };
+
   const getAudioUrl = (phrase: Phrase): string => {
     if (phrase.audio_url) {
       if (phrase.audio_url.startsWith('http')) {
@@ -1035,23 +1050,6 @@ export const PracticeSession: React.FC = () => {
         console.error('Erro ao remover offline:', err);
       }
     }
-  };
-
-  const getPlayableAudioUrl = async (phrase: Phrase): Promise<string | null> => {
-    const url = getAudioUrl(phrase);
-    if (!url) return null;
-
-    try {
-      const cache = await caches.open('hl-island-audios-cache');
-      const cachedResponse = await cache.match(url);
-      if (cachedResponse) {
-        const blob = await cachedResponse.blob();
-        return URL.createObjectURL(blob);
-      }
-    } catch (e) {
-      console.warn('Error reading from Cache Storage:', e);
-    }
-    return url;
   };
 
   // Start Edit Phrase
