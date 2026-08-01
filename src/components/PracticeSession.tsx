@@ -350,17 +350,47 @@ export const PracticeSession: React.FC = () => {
     activeUtteranceRef.current = null;
   };
 
-  // Resolve audio url from Supabase
-  const getAudioUrl = (phrase: Phrase): string | null => {
-    if (!phrase.audio_url) return null;
-    if (phrase.audio_url.startsWith('http')) {
-      if (phrase.audio_url.startsWith('https://audio.hyperlingua.app')) {
-        return phrase.audio_url.replace('https://audio.hyperlingua.app', '/audio-proxy');
+  // Resolve audio url from Supabase or Google Speech TTS stream
+  const getAudioUrl = (phrase: Phrase): string => {
+    if (phrase.audio_url) {
+      if (phrase.audio_url.startsWith('http')) {
+        if (phrase.audio_url.startsWith('https://audio.hyperlingua.app')) {
+          return phrase.audio_url.replace('https://audio.hyperlingua.app', '/audio-proxy');
+        }
+        return phrase.audio_url;
       }
-      return phrase.audio_url;
+      const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
+      if (data?.publicUrl) return data.publicUrl;
     }
-    const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
-    return data.publicUrl;
+    const langMapping: Record<string, string> = {
+      en: 'en',
+      es: 'es',
+      fr: 'fr',
+      it: 'it',
+      de: 'de',
+      zh: 'zh-CN',
+      ru: 'ru'
+    };
+    const targetLang = langMapping[phrase.language_id] || 'en';
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(phrase.text)}&tl=${targetLang}&client=tw-ob`;
+  };
+
+  // Download phrase audio MP3 file to mobile / device
+  const handleDownloadAudio = async (phrase: Phrase, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const url = getAudioUrl(phrase);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${phrase.text.slice(0, 25).replace(/[^a-zA-Z0-9]/g, '_')}_audio.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      window.open(url, '_blank');
+    }
   };
 
   // Direct single audio playback
@@ -2050,6 +2080,15 @@ export const PracticeSession: React.FC = () => {
                           title="Editar frase"
                         >
                           <Edit2 size={14} />
+                        </button>
+
+                        {/* Download Audio Button for Mobile/Offline */}
+                        <button 
+                          onClick={(e) => handleDownloadAudio(phrase, e)}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                          title="Baixar áudio (MP3) para ouvir no celular"
+                        >
+                          <Download size={14} />
                         </button>
                       </div>
 

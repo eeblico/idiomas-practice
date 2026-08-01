@@ -502,11 +502,23 @@ export const ReviewSession: React.FC = () => {
   }, [telemetryStateTrigger, categories]);
 
   // Audio Playback Helpers
-  const getAudioUrl = (phrase: Phrase): string | null => {
-    if (!phrase.audio_url) return null;
-    if (phrase.audio_url.startsWith('http')) return phrase.audio_url;
-    const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
-    return data.publicUrl;
+  const getAudioUrl = (phrase: Phrase): string => {
+    if (phrase.audio_url) {
+      if (phrase.audio_url.startsWith('http')) return phrase.audio_url;
+      const { data } = supabase.storage.from('phrase-audios').getPublicUrl(phrase.audio_url);
+      if (data?.publicUrl) return data.publicUrl;
+    }
+    const langMapping: Record<string, string> = {
+      en: 'en',
+      es: 'es',
+      fr: 'fr',
+      it: 'it',
+      de: 'de',
+      zh: 'zh-CN',
+      ru: 'ru'
+    };
+    const targetLang = langMapping[phrase.language_id] || 'en';
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(phrase.text)}&tl=${targetLang}&client=tw-ob`;
   };
 
   const playPhraseAudio = (phrase: Phrase) => {
