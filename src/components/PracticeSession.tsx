@@ -472,6 +472,18 @@ export const PracticeSession: React.FC = () => {
           audio.playbackRate = playbackSpeedRef.current;
         };
 
+        let hasPlayedFallback = false;
+        const triggerFallbackOnce = () => {
+          if (!hasPlayedFallback && !resolved) {
+            hasPlayedFallback = true;
+            activeAudioRef.current = null;
+            if (playableUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(playableUrl);
+            }
+            speakFallback(phrase.text, phrase.language_id).then(safeResolve);
+          }
+        };
+
         audio.onended = () => {
           clearTimeout(safetyTimer);
           activeAudioRef.current = null;
@@ -483,22 +495,15 @@ export const PracticeSession: React.FC = () => {
 
         audio.onerror = () => {
           clearTimeout(safetyTimer);
-          activeAudioRef.current = null;
-          if (playableUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(playableUrl);
-          }
-          speakFallback(phrase.text, phrase.language_id).then(safeResolve);
+          triggerFallbackOnce();
         };
 
         audio.play().then(() => {
           audio.playbackRate = playbackSpeedRef.current;
-        }).catch(() => {
+        }).catch((err) => {
+          console.warn('Audio play catch fallback:', err);
           clearTimeout(safetyTimer);
-          activeAudioRef.current = null;
-          if (playableUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(playableUrl);
-          }
-          speakFallback(phrase.text, phrase.language_id).then(safeResolve);
+          triggerFallbackOnce();
         });
       } else {
         clearTimeout(safetyTimer);
