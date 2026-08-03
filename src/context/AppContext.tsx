@@ -48,6 +48,7 @@ export interface Phrase {
   voice_name: string;
   speed: number;
   order_index?: number;
+  order?: number;
   tags?: string[];
 }
 
@@ -1037,7 +1038,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const categoryId = activeIslandId || `shadowing-vocab-${targetLanguage}`;
     const isAdmin = user?.email === 'admin@hyperlingua.app' || user?.user_metadata?.role === 'admin';
 
-    const newPhrases: Phrase[] = items.map(item => ({
+    const existingCategoryPhrases = customPhrases.filter(p => p.category_id === categoryId);
+    const maxOrder = existingCategoryPhrases.reduce((max, p) => Math.max(max, p.order || 0), 0);
+
+    const newPhrases: Phrase[] = items.map((item, idx) => ({
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
       language_id: targetLanguage,
       category_id: categoryId,
@@ -1047,7 +1051,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       difficulty: 'medium',
       audio_url: null,
       voice_name: 'Fenrir',
-      speed: 1.0
+      speed: 1.0,
+      order: maxOrder + idx + 1
     }));
 
     // 1. Update local state

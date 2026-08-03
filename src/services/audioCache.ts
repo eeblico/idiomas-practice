@@ -62,5 +62,37 @@ export const audioCacheService = {
     }
 
     return fallbackUrl;
+  },
+
+  // Pre-cache all phrase audios of an island into IndexedDB for 100% offline study
+  async cacheIslandAudios(phrases: { id: string; text: string; language_id: string }[], onProgress?: (done: number, total: number) => void): Promise<number> {
+    let count = 0;
+    for (let i = 0; i < phrases.length; i++) {
+      const p = phrases[i];
+      await this.getPlayableAudio(p.id, p.text, p.language_id);
+      count++;
+      if (onProgress) onProgress(count, phrases.length);
+    }
+    return count;
+  },
+
+  // Check if all phrase audios of an island are cached
+  async isIslandFullyCached(phraseIds: string[]): Promise<boolean> {
+    try {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      for (const id of phraseIds) {
+        const item = await new Promise((res) => {
+          const req = store.get(id);
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => res(undefined);
+        });
+        if (!item) return false;
+      }
+      return phraseIds.length > 0;
+    } catch {
+      return false;
+    }
   }
 };

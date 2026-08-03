@@ -260,6 +260,13 @@ export const PracticeSession: React.FC = () => {
         const difficultyScore = { easy: 1, medium: 2, hard: 3 };
         return difficultyScore[b.difficulty || 'medium'] - difficultyScore[a.difficulty || 'medium'];
       });
+    } else {
+      // Preserve explicit batch insertion order (1, 2, 3...)
+      list = [...list].sort((a, b) => {
+        const orderA = a.order !== undefined ? a.order : 999999;
+        const orderB = b.order !== undefined ? b.order : 999999;
+        return orderA - orderB;
+      });
     }
 
     // If shuffle mode is active, apply random shuffle to make audio activation unpredictable
@@ -985,51 +992,30 @@ export const PracticeSession: React.FC = () => {
     }
   };
 
-  const downloadIslandForOffline = async () => {
-    if (!navigator.onLine) {
-      alert('Você precisa estar online para baixar as frases.');
+  const handleSaveOffline = async () => {
+    if (!islandPhrases || islandPhrases.length === 0) {
+      alert('Nenhuma frase nesta ilha para guardar offline.');
       return;
     }
 
-    const audiosToFetch = islandPhrases.map(phrase => ({
-      phrase,
-      url: getAudioUrl(phrase)
-    })).filter(item => item.url !== null);
-
-    if (audiosToFetch.length === 0) {
-      alert('Nenhuma frase nesta ilha possui áudio disponível.');
-      return;
-    }
-
-    setOfflineProgress('Salvando áudios offline...');
+    setOfflineProgress(`Guardando áudios da ilha: 0/${islandPhrases.length}...`);
 
     try {
-      const cache = await caches.open('hl-island-audios-cache');
-      let successCount = 0;
-
-      for (let i = 0; i < audiosToFetch.length; i++) {
-        const item = audiosToFetch[i];
-        setOfflineProgress(`Salvando áudio ${i + 1}/${audiosToFetch.length}...`);
-        
-        try {
-          const response = await fetch(item.url!);
-          if (response.ok) {
-            await cache.put(item.url!, response);
-            successCount++;
-          }
-        } catch (err) {
-          console.warn(`Erro ao baixar para offline: ${item.phrase.text}`, err);
+      const successCount = await audioCacheService.cacheIslandAudios(
+        islandPhrases.map(p => ({ id: p.id, text: p.text, language_id: p.language_id })),
+        (done, total) => {
+          setOfflineProgress(`Guardando áudios da ilha: ${done}/${total}...`);
         }
-      }
+      );
 
       localStorage.setItem(`hl_island_offline_${activeIslandId}`, 'true');
       setIsOfflineCached(true);
       setOfflineProgress(null);
-      alert(`Sucesso! ${successCount} áudios salvos offline.`);
+      alert(`✓ Sucesso! Todos os ${successCount} áudios desta ilha foram salvos no app para estudo 100% offline!`);
     } catch (err) {
-      console.error('Erro ao salvar offline:', err);
+      console.error('Erro ao guardar áudios offline:', err);
       setOfflineProgress(null);
-      alert('Erro ao salvar áudios offline.');
+      alert('Erro ao guardar áudios da ilha offline.');
     }
   };
 
@@ -2679,7 +2665,7 @@ export const PracticeSession: React.FC = () => {
                       className="btn"
                       onClick={() => {
                         setSettingsOpen(false);
-                        downloadIslandForOffline();
+                        handleSaveOffline();
                       }}
                       style={{
                         width: '100%',
