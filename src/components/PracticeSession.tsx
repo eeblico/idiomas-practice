@@ -476,7 +476,14 @@ export const PracticeSession: React.FC = () => {
         const triggerFallbackOnce = () => {
           if (!hasPlayedFallback && !resolved) {
             hasPlayedFallback = true;
-            activeAudioRef.current = null;
+            if (activeAudioRef.current) {
+              try {
+                activeAudioRef.current.pause();
+                activeAudioRef.current.src = '';
+                activeAudioRef.current.load();
+              } catch (e) {}
+              activeAudioRef.current = null;
+            }
             if (playableUrl.startsWith('blob:')) {
               URL.revokeObjectURL(playableUrl);
             }
@@ -498,6 +505,10 @@ export const PracticeSession: React.FC = () => {
           triggerFallbackOnce();
         };
 
+        if ('speechSynthesis' in window) {
+          try { window.speechSynthesis.cancel(); } catch (e) {}
+        }
+
         audio.play().then(() => {
           audio.playbackRate = playbackSpeedRef.current;
         }).catch((err) => {
@@ -518,8 +529,13 @@ export const PracticeSession: React.FC = () => {
       if (activeAudioRef.current) {
         try {
           activeAudioRef.current.pause();
+          activeAudioRef.current.src = '';
+          activeAudioRef.current.load();
         } catch (e) {}
         activeAudioRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
       }
       activeUtteranceRef.current = null;
 
@@ -537,13 +553,22 @@ export const PracticeSession: React.FC = () => {
     }
   };
 
-  // TTS Fallback with guaranteed safety timeout
+  // TTS Fallback with guaranteed safety timeout and single execution
   const speakFallback = (text: string, langCode: string): Promise<void> => {
     return new Promise((resolve) => {
       try {
         if (!('speechSynthesis' in window)) {
           resolve();
           return;
+        }
+
+        if (activeAudioRef.current) {
+          try {
+            activeAudioRef.current.pause();
+            activeAudioRef.current.src = '';
+            activeAudioRef.current.load();
+          } catch (e) {}
+          activeAudioRef.current = null;
         }
 
         let resolved = false;
@@ -581,6 +606,7 @@ export const PracticeSession: React.FC = () => {
           done();
         };
 
+        try { window.speechSynthesis.cancel(); } catch (e) {}
         window.speechSynthesis.speak(utterance);
       } catch {
         activeUtteranceRef.current = null;
