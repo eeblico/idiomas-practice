@@ -206,6 +206,7 @@ export const PracticeSession: React.FC = () => {
   const [translationEnabled, setTranslationEnabled] = useState(false);
   
   const currentRepRef = useRef<number>(1);
+  const loopIdRef = useRef<number>(0);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const autoplayTimerRef = useRef<number | null>(null);
@@ -337,11 +338,16 @@ export const PracticeSession: React.FC = () => {
 
   // Stop everything
   const stopPlayer = () => {
+    loopIdRef.current++;
     setIsPlaying(false);
     setPlayingIndex(null);
     setActivePlayingId(null);
     if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
+      try {
+        activeAudioRef.current.pause();
+        activeAudioRef.current.src = '';
+        activeAudioRef.current.load();
+      } catch (e) {}
       activeAudioRef.current = null;
     }
     if (activeAudioResolveRef.current) {
@@ -354,7 +360,9 @@ export const PracticeSession: React.FC = () => {
       clearTimeout(autoplayTimerRef.current);
       autoplayTimerRef.current = null;
     }
-    window.speechSynthesis.cancel();
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
     activeUtteranceRef.current = null;
   };
 
@@ -525,6 +533,7 @@ export const PracticeSession: React.FC = () => {
 
   // Click on a phrase card to play and (if autoplay is active) continue autoplay from it
   const handlePhraseCardClick = (phrase: Phrase, index: number) => {
+    loopIdRef.current++;
     if (isPlaying) {
       if (activeAudioRef.current) {
         try {
@@ -619,11 +628,15 @@ export const PracticeSession: React.FC = () => {
   useEffect(() => {
     if (!isPlaying) return;
 
+    const currentLoopId = ++loopIdRef.current;
+
     const runAutoplayLoop = async () => {
       if (playingIndex === null || playingIndex >= islandPhrases.length) {
         stopPlayer();
         return;
       }
+
+      if (loopIdRef.current !== currentLoopId) return;
 
       const phrase = islandPhrases[playingIndex];
       setActivePlayingId(phrase.id);
@@ -641,11 +654,13 @@ export const PracticeSession: React.FC = () => {
 
       // Play audio loop for configured reps
       for (let r = currentRepRef.current; r <= repetitionsRef.current; r++) {
-        if (!isPlaying) return;
+        if (!isPlaying || loopIdRef.current !== currentLoopId) return;
         currentRepRef.current = r;
         
         // Play audio
         await playAudioFile(phrase);
+        if (!isPlaying || loopIdRef.current !== currentLoopId) return;
+
         setSessionRepCount(prev => prev + 1);
 
         try {
@@ -672,7 +687,7 @@ export const PracticeSession: React.FC = () => {
         }
 
         // Pause duration delay between repeats
-        if (r < repetitionsRef.current && isPlaying) {
+        if (r < repetitionsRef.current && isPlaying && loopIdRef.current === currentLoopId) {
           await new Promise(resolve => {
             autoplayTimerRef.current = setTimeout(resolve, pauseDurationRef.current * 1000) as any;
           });
@@ -680,12 +695,15 @@ export const PracticeSession: React.FC = () => {
       }
 
       // Delay before moving to the next phrase card in the grid list
-      if (isPlaying) {
+      if (isPlaying && loopIdRef.current === currentLoopId) {
         currentRepRef.current = 1;
         await new Promise(resolve => {
           autoplayTimerRef.current = setTimeout(resolve, pauseDurationRef.current * 1000) as any;
         });
-        setPlayingIndex(prev => (prev !== null ? prev + 1 : null));
+
+        if (isPlaying && loopIdRef.current === currentLoopId) {
+          setPlayingIndex(prev => (prev !== null ? prev + 1 : null));
+        }
       }
     };
 
