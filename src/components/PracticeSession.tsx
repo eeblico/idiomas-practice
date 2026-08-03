@@ -415,27 +415,43 @@ export const PracticeSession: React.FC = () => {
     }
   };
 
-  // Direct single audio playback
+  // Direct single audio playback with safety timeout for bulletproof autoplay
   const playAudioFile = async (phrase: Phrase): Promise<void> => {
     markPhraseAsSeen(phrase.id);
     return new Promise(async (resolve) => {
       if (!audioEnabled) {
-        // Just simulate playback duration if audio is toggled off
         setTimeout(() => resolve(), 1500);
         return;
       }
 
-      // Resolve any pending audio promise first to release it cleanly!
+      let resolved = false;
+      const safeResolve = () => {
+        if (!resolved) {
+          resolved = true;
+          activeAudioResolveRef.current = null;
+          resolve();
+        }
+      };
+
+      // Maximum 12 seconds per phrase safety timeout so autoplay NEVER gets stuck
+      const safetyTimer = setTimeout(() => {
+        if (!resolved) {
+          if (activeAudioRef.current) {
+            try { activeAudioRef.current.pause(); } catch (e) {}
+          }
+          safeResolve();
+        }
+      }, 12000);
+
+      // Resolve any pending audio promise first to release it cleanly
       if (activeAudioResolveRef.current) {
-        try {
-          activeAudioResolveRef.current();
-        } catch (e) {}
+        try { activeAudioResolveRef.current(); } catch (e) {}
         activeAudioResolveRef.current = null;
       }
-      activeAudioResolveRef.current = resolve;
+      activeAudioResolveRef.current = safeResolve;
 
       if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
+        try { activeAudioRef.current.pause(); } catch (e) {}
       }
 
       const playableUrl = await getPlayableAudioUrl(phrase);
@@ -443,13 +459,10 @@ export const PracticeSession: React.FC = () => {
         const audio = new Audio(playableUrl);
         activeAudioRef.current = audio;
         
-        // Preserve pitch when accelerated or decelerated
         if ('preservesPitch' in audio) {
           audio.preservesPitch = true;
         } else if ('webkitPreservesPitch' in audio) {
           (audio as any).webkitPreservesPitch = true;
-        } else if ('mozPreservesPitch' in audio) {
-          (audio as any).mozPreservesPitch = true;
         }
 
         audio.defaultPlaybackRate = playbackSpeedRef.current;
@@ -459,40 +472,37 @@ export const PracticeSession: React.FC = () => {
           audio.playbackRate = playbackSpeedRef.current;
         };
 
-        audio.oncanplay = () => {
-          audio.playbackRate = playbackSpeedRef.current;
-        };
-
         audio.onended = () => {
+          clearTimeout(safetyTimer);
           activeAudioRef.current = null;
-          activeAudioResolveRef.current = null;
           if (playableUrl.startsWith('blob:')) {
             URL.revokeObjectURL(playableUrl);
           }
-          resolve();
+          safeResolve();
         };
 
         audio.onerror = () => {
+          clearTimeout(safetyTimer);
           activeAudioRef.current = null;
-          activeAudioResolveRef.current = null;
           if (playableUrl.startsWith('blob:')) {
             URL.revokeObjectURL(playableUrl);
           }
-          speakFallback(phrase.text, phrase.language_id).then(resolve);
+          speakFallback(phrase.text, phrase.language_id).then(safeResolve);
         };
 
         audio.play().then(() => {
           audio.playbackRate = playbackSpeedRef.current;
         }).catch(() => {
+          clearTimeout(safetyTimer);
           activeAudioRef.current = null;
-          activeAudioResolveRef.current = null;
           if (playableUrl.startsWith('blob:')) {
             URL.revokeObjectURL(playableUrl);
           }
-          speakFallback(phrase.text, phrase.language_id).then(resolve);
+          speakFallback(phrase.text, phrase.language_id).then(safeResolve);
         });
       } else {
-        speakFallback(phrase.text, phrase.language_id).then(resolve);
+        clearTimeout(safetyTimer);
+        speakFallback(phrase.text, phrase.language_id).then(safeResolve);
       }
     });
   };
@@ -500,17 +510,14 @@ export const PracticeSession: React.FC = () => {
   // Click on a phrase card to play and (if autoplay is active) continue autoplay from it
   const handlePhraseCardClick = (phrase: Phrase, index: number) => {
     if (isPlaying) {
-      // Autoplay is active. Jump to this card and continue autoplay from here!
       if (activeAudioRef.current) {
         try {
           activeAudioRef.current.pause();
         } catch (e) {}
         activeAudioRef.current = null;
       }
-      window.speechSynthesis.cancel();
       activeUtteranceRef.current = null;
 
-      // Resolve the pending promise to unblock the autoplay loop
       if (activeAudioResolveRef.current) {
         try {
           activeAudioResolveRef.current();
@@ -518,24 +525,35 @@ export const PracticeSession: React.FC = () => {
         activeAudioResolveRef.current = null;
       }
 
-      // Reset repetition counter to 1
       currentRepRef.current = 1;
-      
-      // Update playing index, triggering the autoplay useEffect to play this index
       setPlayingIndex(index);
     } else {
-      // Autoplay is not active. Just play the audio for this phrase once
       playAudioFile(phrase);
     }
   };
 
-  // TTS Fallback
+  // TTS Fallback with guaranteed safety timeout
   const speakFallback = (text: string, langCode: string): Promise<void> => {
     return new Promise((resolve) => {
       try {
-        window.speechSynthesis.cancel();
+        if (!('speechSynthesis' in window)) {
+          resolve();
+          return;
+        }
+
+        let resolved = false;
+        const done = () => {
+          if (!resolved) {
+            resolved = true;
+            activeUtteranceRef.current = null;
+            resolve();
+          }
+        };
+
+        const safetyTimeout = setTimeout(done, Math.max(3000, text.length * 250));
+
         const utterance = new SpeechSynthesisUtterance(text);
-        activeUtteranceRef.current = utterance; // Keep reference alive to prevent GC cutoff!
+        activeUtteranceRef.current = utterance;
         utterance.rate = playbackSpeedRef.current;
 
         const langMapping: Record<string, string> = {
@@ -550,14 +568,12 @@ export const PracticeSession: React.FC = () => {
         utterance.lang = langMapping[langCode] || langCode;
 
         utterance.onend = () => {
-          activeUtteranceRef.current = null;
-          activeAudioResolveRef.current = null;
-          resolve();
+          clearTimeout(safetyTimeout);
+          done();
         };
         utterance.onerror = () => {
-          activeUtteranceRef.current = null;
-          activeAudioResolveRef.current = null;
-          resolve();
+          clearTimeout(safetyTimeout);
+          done();
         };
 
         window.speechSynthesis.speak(utterance);
