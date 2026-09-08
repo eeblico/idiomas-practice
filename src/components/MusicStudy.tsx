@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { cloudSyncService } from '../services/cloudSync';
+import { userStorage } from '../services/userStorage';
 import { 
   Music, Plus, Trash2, ArrowLeft, CheckCircle, 
   HelpCircle, X, RotateCcw, Youtube, Languages, Eye, EyeOff, Info,
-  Play, Pause, Headphones, MessageSquare, Star, Edit2, ChevronRight, Settings, Repeat, Layers
+  Play, Pause, Headphones, MessageSquare, Star, Edit2, ChevronRight, Settings, Repeat, Layers,
+  Download, Upload, Globe, Check
 } from 'lucide-react';
 
 interface Song {
@@ -196,6 +198,16 @@ interface ScrambledWord {
   clean: string; // clean lowercase e.g. "yesterday"
 }
 
+const LANG_MAP: Record<string, { name: string; flag: string }> = {
+  en: { name: 'Inglês', flag: '🇺🇸' },
+  es: { name: 'Espanhol', flag: '🇪🇸' },
+  fr: { name: 'Francês', flag: '🇫🇷' },
+  it: { name: 'Italiano', flag: '🇮🇹' },
+  de: { name: 'Alemão', flag: '🇩🇪' },
+  zh: { name: 'Mandarim', flag: '🇨🇳' },
+  pt: { name: 'Português', flag: '🇧🇷' }
+};
+
 export const MusicStudy: React.FC = () => {
   const { targetLanguage } = useApp();
 
@@ -209,6 +221,11 @@ export const MusicStudy: React.FC = () => {
   const [flashcardMode, setFlashcardMode] = useState(false);
   const [currentFlashcardIdx, setCurrentFlashcardIdx] = useState(0);
   const [isFlashcardFlipped, setIsFlashcardFlipped] = useState(false);
+
+  // Language filter & backup states
+  const [showAllLanguages, setShowAllLanguages] = useState<boolean>(false);
+  const [songLanguage, setSongLanguage] = useState<string>(targetLanguage);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Add song form states
   const [newTitle, setNewTitle] = useState('');
@@ -305,20 +322,15 @@ export const MusicStudy: React.FC = () => {
   // --- Load Songs & Cloud Sync ---
   useEffect(() => {
     const loadSongs = async () => {
-      let stored = localStorage.getItem('hl_custom_songs');
-      let custom: Song[] = [];
-      try {
-        custom = stored ? JSON.parse(stored) : [];
-      } catch {
-        custom = [];
-      }
+      // 1. Dual persistent storage: retrieve from localStorage or restore from IndexedDB
+      let custom: Song[] = await userStorage.getSongs();
 
-      // If local is empty, attempt pulling from Cloud DB
+      // 2. If both local and IndexedDB are empty, attempt pulling from Cloud DB
       if (custom.length === 0) {
         const cloudData = await cloudSyncService.pullFromCloud();
         if (cloudData && cloudData.customSongs && cloudData.customSongs.length > 0) {
           custom = cloudData.customSongs;
-          localStorage.setItem('hl_custom_songs', JSON.stringify(custom));
+          await userStorage.saveSongs(custom);
         }
       }
       
@@ -339,10 +351,13 @@ export const MusicStudy: React.FC = () => {
     };
   }, [addModalOpen]);
 
-  // Filtered catalog by current language
+  // Filtered catalog by current language or all languages
   const filteredSongs = useMemo(() => {
+    if (showAllLanguages) {
+      return songs;
+    }
     return songs.filter(s => s.language_id === targetLanguage);
-  }, [songs, targetLanguage]);
+  }, [songs, targetLanguage, showAllLanguages]);
 
   // Get Youtube Video ID
   const youtubeId = useMemo(() => {
@@ -721,7 +736,7 @@ export const MusicStudy: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const saveUpdatedSongLines = (lyrics: string[], translations: string[], explanations?: string[]) => {
+  const saveUpdatedSongLines = async (lyrics: string[], translations: string[], explanations?: string[]) => {
     if (!activeSong) return;
 
     const finalExplanations = explanations 
@@ -738,12 +753,14 @@ export const MusicStudy: React.FC = () => {
     // Update state
     setActiveSong(updatedSong);
 
-    // Save custom songs to localStorage & Cloud DB
-    const stored = localStorage.getItem('hl_custom_songs');
-    const custom: Song[] = stored ? JSON.parse(stored) : [];
+    // Save custom songs to userStorage (IndexedDB + localStorage) & Cloud DB
+    const custom: Song[] = await userStorage.getSongs();
     const updatedCustom = custom.map(s => s.id === activeSong.id ? updatedSong : s);
-    localStorage.setItem('hl_custom_songs', JSON.stringify(updatedCustom));
+    await userStorage.saveSongs(updatedCustom);
     cloudSyncService.pushToCloud({ customSongs: updatedCustom });
+
+    // Keep songs list in sync immediately
+    setSongs(prev => prev.map(s => s.id === activeSong.id ? updatedSong : s));
   };
 
   // --- Game 1: Prepare Cloze Test ---
@@ -919,6 +936,7 @@ export const MusicStudy: React.FC = () => {
   const handleStartEditSong = (song: Song, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingSongId(song.id);
+    setSongLanguage(song.language_id || targetLanguage);
     setNewTitle(song.title);
     setNewArtist(song.artist);
     setNewUrl(song.youtube_url);
@@ -928,7 +946,7 @@ export const MusicStudy: React.FC = () => {
     setAddModalOpen(true);
   };
 
-  const handleAddSong = (e: React.FormEvent) => {
+  const handleAddSong = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newArtist.trim() || !newUrl.trim() || !newLyrics.trim() || !newTranslation.trim()) {
       alert("Por favor, preencha todos os campos obrigatórios.");
@@ -937,12 +955,12 @@ export const MusicStudy: React.FC = () => {
 
     if (editingSongId) {
       // Edit Flow
-      const stored = localStorage.getItem('hl_custom_songs');
-      const custom: Song[] = stored ? JSON.parse(stored) : [];
+      const custom: Song[] = await userStorage.getSongs();
       const updated = custom.map(s => {
         if (s.id === editingSongId) {
           return {
             ...s,
+            language_id: songLanguage || s.language_id || targetLanguage,
             title: newTitle.trim(),
             artist: newArtist.trim(),
             youtube_url: newUrl.trim(),
@@ -953,13 +971,19 @@ export const MusicStudy: React.FC = () => {
         }
         return s;
       });
-      localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+      await userStorage.saveSongs(updated);
       cloudSyncService.pushToCloud({ customSongs: updated });
+
+      // Immediate in-memory update
+      const customIds = new Set(updated.map(s => s.id));
+      const missingPreloaded = PRELOADED_SONGS.filter(s => !customIds.has(s.id));
+      setSongs([...updated, ...missingPreloaded].filter(s => s.id !== 'preloaded-en-yesterday'));
 
       // Update activeSong state if it's the one being edited
       if (activeSong && activeSong.id === editingSongId) {
         setActiveSong({
           ...activeSong,
+          language_id: songLanguage || activeSong.language_id || targetLanguage,
           title: newTitle.trim(),
           artist: newArtist.trim(),
           youtube_url: newUrl.trim(),
@@ -975,7 +999,7 @@ export const MusicStudy: React.FC = () => {
       // Add Flow
       const newSong: Song = {
         id: `custom-song-${Date.now()}`,
-        language_id: targetLanguage,
+        language_id: songLanguage || targetLanguage,
         title: newTitle.trim(),
         artist: newArtist.trim(),
         youtube_url: newUrl.trim(),
@@ -984,30 +1008,73 @@ export const MusicStudy: React.FC = () => {
         explanations: newExplanations.trim()
       };
 
-      const stored = localStorage.getItem('hl_custom_songs');
-      const custom: Song[] = stored ? JSON.parse(stored) : [];
+      const custom: Song[] = await userStorage.getSongs();
       const updated = [newSong, ...custom];
-      localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+      await userStorage.saveSongs(updated);
       cloudSyncService.pushToCloud({ customSongs: updated });
 
+      // Immediate in-memory update
+      const customIds = new Set(updated.map(s => s.id));
+      const missingPreloaded = PRELOADED_SONGS.filter(s => !customIds.has(s.id));
+      setSongs([...updated, ...missingPreloaded].filter(s => s.id !== 'preloaded-en-yesterday'));
+
       handleCloseAddModal();
-      alert(`Música "${newSong.title}" adicionada com sucesso!`);
+      alert(`Música "${newSong.title}" adicionada com sucesso e salva no seu dispositivo!`);
     }
   };
 
-  const handleDeleteSong = (songId: string, e: React.MouseEvent) => {
+  const handleDeleteSong = async (songId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("Deseja realmente excluir esta música?")) return;
 
-    const stored = localStorage.getItem('hl_custom_songs');
-    const custom: Song[] = stored ? JSON.parse(stored) : [];
+    const custom: Song[] = await userStorage.getSongs();
     const updated = custom.filter(s => s.id !== songId);
-    localStorage.setItem('hl_custom_songs', JSON.stringify(updated));
+    await userStorage.saveSongs(updated);
     cloudSyncService.pushToCloud({ customSongs: updated });
     setSongs(prev => prev.filter(s => s.id !== songId));
 
     if (activeSong?.id === songId) {
       setActiveSong(null);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      const backupJson = await userStorage.exportBackup();
+      const blob = new Blob([backupJson], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `noclima_musicas_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Erro ao exportar backup: ${err.message}`);
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const res = await userStorage.importBackup(text);
+      if (res.success) {
+        alert(res.message);
+        // Refresh songs immediately
+        const fresh = await userStorage.getSongs();
+        const customIds = new Set(fresh.map((s: any) => s.id));
+        const missingPreloaded = PRELOADED_SONGS.filter(s => !customIds.has(s.id));
+        setSongs([...fresh, ...missingPreloaded].filter(s => s.id !== 'preloaded-en-yesterday'));
+      } else {
+        alert(`Falha ao importar: ${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`Erro ao ler arquivo: ${err.message}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -1019,7 +1086,7 @@ export const MusicStudy: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '30px' }}>
           
           {/* Header Row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Music size={24} style={{ color: 'var(--accent)' }} />
@@ -1030,13 +1097,62 @@ export const MusicStudy: React.FC = () => {
               </p>
             </div>
             
-            <button 
-              className="btn btn-primary" 
-              onClick={() => setAddModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px' }}
-            >
-              <Plus size={16} /> Adicionar Música
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => { setSongLanguage(targetLanguage); setAddModalOpen(true); }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px' }}
+              >
+                <Plus size={16} /> Adicionar Música
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Row & Backup Controls */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Exibir:</span>
+              <button
+                className={`btn ${!showAllLanguages ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setShowAllLanguages(false)}
+                style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+              >
+                {LANG_MAP[targetLanguage]?.flag || '🌐'} {LANG_MAP[targetLanguage]?.name || targetLanguage} ({songs.filter(s => s.language_id === targetLanguage).length})
+              </button>
+              <button
+                className={`btn ${showAllLanguages ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setShowAllLanguages(true)}
+                style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+              >
+                <Globe size={13} /> Todas as Músicas ({songs.length})
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={handleExportBackup}
+                className="btn btn-secondary"
+                title="Baixar backup de todas as músicas em formato JSON"
+                style={{ fontSize: '0.75rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Download size={13} /> Exportar Backup
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="btn btn-secondary"
+                title="Restaurar músicas de um arquivo JSON"
+                style={{ fontSize: '0.75rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Upload size={13} /> Importar Backup
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImportBackup}
+                accept=".json"
+                style={{ display: 'none' }}
+              />
+            </div>
           </div>
 
           {/* Cards Grid */}
@@ -1044,10 +1160,11 @@ export const MusicStudy: React.FC = () => {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '16px',
-            marginTop: '8px'
+            marginTop: '4px'
           }}>
             {filteredSongs.map((song) => {
               const isPreloaded = song.id.startsWith('preloaded-');
+              const langInfo = LANG_MAP[song.language_id];
               return (
                 <div 
                   key={song.id}
@@ -1092,17 +1209,34 @@ export const MusicStudy: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                    <span style={{
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '3px 8px',
-                      borderRadius: 'var(--radius-full)',
-                      background: isPreloaded ? 'var(--accent-glow)' : 'rgba(255,255,255,0.05)',
-                      color: isPreloaded ? 'var(--accent)' : 'var(--text-muted)'
-                    }}>
-                      {isPreloaded ? 'Coleção Padrão' : 'Personalizada'}
-                    </span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        background: isPreloaded ? 'var(--accent-glow)' : 'rgba(255,255,255,0.05)',
+                        color: isPreloaded ? 'var(--accent)' : 'var(--text-muted)'
+                      }}>
+                        {isPreloaded ? 'Coleção Padrão' : 'Personalizada'}
+                      </span>
+                      {langInfo && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'rgba(255,255,255,0.04)',
+                          color: 'var(--text-secondary)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          {langInfo.flag} {langInfo.name}
+                        </span>
+                      )}
+                    </div>
 
                     {!isPreloaded && (
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -2386,17 +2520,36 @@ export const MusicStudy: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Link do Vídeo no YouTube</label>
-                  <input 
-                    type="url" 
-                    className="input-text" 
-                    style={{ width: '100%' }}
-                    placeholder="e.g. https://www.youtube.com/watch?v=YkgkThdzWik" 
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    required 
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Idioma da Música</label>
+                    <select
+                      className="input-text"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                      value={songLanguage}
+                      onChange={(e) => setSongLanguage(e.target.value)}
+                    >
+                      <option value="en">🇺🇸 Inglês</option>
+                      <option value="es">🇪🇸 Espanhol</option>
+                      <option value="fr">🇫🇷 Francês</option>
+                      <option value="it">🇮🇹 Italiano</option>
+                      <option value="de">🇩🇪 Alemão</option>
+                      <option value="zh">🇨🇳 Mandarim</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Link do Vídeo no YouTube</label>
+                    <input 
+                      type="url" 
+                      className="input-text" 
+                      style={{ width: '100%' }}
+                      placeholder="e.g. https://www.youtube.com/watch?v=YkgkThdzWik" 
+                      value={newUrl}
+                      onChange={(e) => setNewUrl(e.target.value)}
+                      required 
+                    />
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', background: 'rgba(124,58,237,0.05)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(124,58,237,0.2)', alignItems: 'center' }}>

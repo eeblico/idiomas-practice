@@ -154,15 +154,15 @@ export const Settings: React.FC = () => {
           // Guest User State
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{
-              background: 'rgba(245, 158, 11, 0.08)',
-              border: '1px solid rgba(245, 158, 11, 0.15)',
+              background: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.25)',
               padding: '12px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.8rem',
-              color: 'var(--warning)',
+              color: 'var(--text-secondary)',
               lineHeight: 1.4
             }}>
-              Você está praticando como <strong>Visitante</strong>. Seu progresso local não será sincronizado entre dispositivos e pode ser apagado se limpar o histórico do navegador.
+              ✓ Modo Offline Ativo: suas músicas e frases estão salvas localmente no navegador e no <strong>IndexedDB</strong> com proteção contra desligamento. Entre ou conecte o Supabase para sincronizar entre múltiplos computadores ou celular.
             </div>
 
             {showAuth ? (
@@ -174,7 +174,7 @@ export const Settings: React.FC = () => {
               </div>
             ) : (
               <button className="btn btn-primary" onClick={() => setShowAuth(true)} style={{ width: '100%' }}>
-                Entrar ou Criar Conta
+                Entrar ou Conectar Supabase
               </button>
             )}
           </div>

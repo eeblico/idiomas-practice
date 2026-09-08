@@ -1,6 +1,27 @@
-import React, { useState } from 'react';
-import { supabase, isSupabaseConfigured } from '../services/supabase';
-import { Mail, Lock, User, LogIn, ArrowRight, UserPlus, Key, Globe, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  supabase,
+  isSupabaseConfigured,
+  checkSupabaseHealth,
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  reinitSupabase,
+  SupabaseHealthResult
+} from '../services/supabase';
+import {
+  Mail,
+  Lock,
+  User,
+  LogIn,
+  ArrowRight,
+  UserPlus,
+  Key,
+  Check,
+  AlertTriangle,
+  ExternalLink,
+  RefreshCw,
+  Server
+} from 'lucide-react';
 
 interface AuthProps {
   onSuccess: () => void;
@@ -15,10 +36,42 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Health check state
+  const [health, setHealth] = useState<SupabaseHealthResult | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+
   // Custom Supabase Config fields
-  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => localStorage.getItem('hl_supabase_url') || '');
-  const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => localStorage.getItem('hl_supabase_anon_key') || '');
-  const [showConfig, setShowConfig] = useState(() => !isSupabaseConfigured());
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => getSupabaseUrl());
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => getSupabaseAnonKey());
+  const [showConfig, setShowConfig] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  // Verify health on mount
+  useEffect(() => {
+    const runCheck = async () => {
+      setCheckingHealth(true);
+      const res = await checkSupabaseHealth();
+      setHealth(res);
+      setCheckingHealth(false);
+      if (!res.ok) {
+        setShowConfig(true);
+      }
+    };
+    runCheck();
+  }, []);
+
+  const handleTestConnection = async () => {
+    setCheckingHealth(true);
+    setTestResult(null);
+    const res = await checkSupabaseHealth(supabaseUrlInput, supabaseKeyInput);
+    setHealth(res);
+    setCheckingHealth(false);
+    if (res.ok) {
+      setTestResult('✓ Conexão bem-sucedida! O banco de dados está ativo.');
+    } else {
+      setTestResult(`❌ Falha: ${res.message}`);
+    }
+  };
 
   const handleSaveSupabaseConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,16 +79,14 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
       setError('Por favor, insira a URL e a Chave Anon do seu projeto Supabase.');
       return;
     }
-    localStorage.setItem('hl_supabase_url', supabaseUrlInput.trim());
-    localStorage.setItem('hl_supabase_anon_key', supabaseKeyInput.trim());
-    alert('✓ Credenciais do Supabase salvas com sucesso! Recarregando para conectar...');
+    reinitSupabase(supabaseUrlInput, supabaseKeyInput);
+    alert('✓ Novas credenciais salvas com sucesso! Recarregando para conectar...');
     window.location.reload();
   };
 
   const handleGoogleLogin = async () => {
-    if (!isSupabaseConfigured()) {
-      setShowConfig(true);
-      setError('Para fazer login, insira a URL e a Chave do seu projeto Supabase abaixo.');
+    if (health && !health.ok) {
+      setError(`O servidor Supabase está inacessível (${health.message}). Reative seu projeto no Supabase ou use 'Continuar como Visitante'.`);
       return;
     }
     setError(null);
@@ -55,9 +106,8 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
   };
 
   const handleGithubLogin = async () => {
-    if (!isSupabaseConfigured()) {
-      setShowConfig(true);
-      setError('Para fazer login, insira a URL e a Chave do seu projeto Supabase abaixo.');
+    if (health && !health.ok) {
+      setError(`O servidor Supabase está inacessível (${health.message}). Reative seu projeto no Supabase ou use 'Continuar como Visitante'.`);
       return;
     }
     setError(null);
@@ -80,9 +130,10 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
     e.preventDefault();
     setError(null);
 
-    if (!isSupabaseConfigured()) {
-      setShowConfig(true);
-      setError('Para fazer login, insira a URL e a Chave do seu projeto Supabase abaixo.');
+    if (health && !health.ok) {
+      setError(
+        `Servidor Supabase indisponível no momento: ${health.message}. Você pode usar 'Continuar como Visitante' para praticar offline normalmente sem perder seus dados.`
+      );
       return;
     }
 
@@ -90,59 +141,163 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
 
     try {
       if (isSignUp) {
-        // Sign Up Flow
         const { error: signUpErr } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
             data: {
-              display_name: displayName
+              display_name: displayName.trim()
             }
           }
         });
         if (signUpErr) throw signUpErr;
-        
-        // Show success alert
+
         alert('Cadastro realizado com sucesso! Verifique seu e-mail para confirmação se necessário.');
         setIsSignUp(false);
       } else {
-        // Sign In Flow
         const { error: signInErr } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password
         });
         if (signInErr) throw signInErr;
         onSuccess();
       }
     } catch (err: any) {
-      setError(err.message || 'Ocorreu um erro no processo de autenticação.');
+      if (err.message?.includes('fetch') || err.message?.includes('network')) {
+        setError(
+          'Falha de rede ao contatar o Supabase. O projeto pode estar pausado. Clique em "Continuar como Visitante" para estudar offline com segurança.'
+        );
+      } else {
+        setError(err.message || 'Ocorreu um erro no processo de autenticação.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: '100%', justifyContent: 'center' }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px', minHeight: '100%', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>NoClima</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          {isSignUp ? 'Crie sua conta para sincronizar seu progresso.' : 'Entre para retomar seu aprendizado.'}
+        <h1 style={{ fontSize: '1.8rem', marginBottom: '6px', fontFamily: 'var(--font-display)' }}>NoClima</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+          {isSignUp ? 'Crie sua conta para sincronizar seu progresso na nuvem.' : 'Entre para acessar seu perfil e sincronizar seus dados.'}
         </p>
       </div>
 
-      {showConfig && (
-        <form onSubmit={handleSaveSupabaseConfig} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid rgba(245, 158, 11, 0.35)', background: 'rgba(245, 158, 11, 0.04)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
-            <Key size={18} />
-            <strong style={{ fontSize: '0.95rem' }}>Configurar Conexão do Supabase</strong>
+      {/* Supabase Health Banner if Paused or Offline */}
+      {health && !health.ok && (
+        <div
+          className="glass-card"
+          style={{
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            padding: '16px',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
+            <AlertTriangle size={18} />
+            <strong style={{ fontSize: '0.9rem' }}>Banco de Dados em Pausa ou Inacessível</strong>
           </div>
 
-          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
-            Insira a <strong>URL do Projeto</strong> e a <strong>Chave Anon</strong> do seu Supabase para conectar seu login e banco de dados:
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+            O projeto Supabase <code>{health.projectRef}</code> foi pausado pela política de inatividade do plano gratuito. Para reativá-lo com 1 clique:
           </p>
 
-          <div className="form-group">
-            <label className="form-label" style={{ fontSize: '0.75rem' }}>VITE_SUPABASE_URL</label>
+          <a
+            href={`https://supabase.com/dashboard/project/${health.projectRef}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn"
+            style={{
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '8px 12px'
+            }}
+          >
+            Reativar Projeto no Supabase <ExternalLink size={14} />
+          </a>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={checkingHealth}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--accent)',
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: 0
+              }}
+            >
+              <RefreshCw size={12} className={checkingHealth ? 'spin' : ''} /> {checkingHealth ? 'Testando...' : 'Verificar se já reativou'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              {showConfig ? 'Ocultar configurações' : 'Usar outro projeto Supabase'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Supabase Connection Config Panel */}
+      {showConfig && (
+        <form onSubmit={handleSaveSupabaseConfig} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid rgba(245, 158, 11, 0.35)', background: 'rgba(245, 158, 11, 0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
+              <Server size={18} />
+              <strong style={{ fontSize: '0.9rem' }}>Configurar Conexão do Supabase</strong>
+            </div>
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={checkingHealth}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.72rem', padding: '4px 10px' }}
+            >
+              {checkingHealth ? 'Testando...' : 'Testar Conexão'}
+            </button>
+          </div>
+
+          {testResult && (
+            <div style={{
+              fontSize: '0.75rem',
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-sm)',
+              background: testResult.startsWith('✓') ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+              color: testResult.startsWith('✓') ? '#22c55e' : '#ef4444'
+            }}>
+              {testResult}
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>URL do Projeto</label>
             <input
               type="text"
               required
@@ -154,8 +309,8 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label" style={{ fontSize: '0.75rem' }}>VITE_SUPABASE_ANON_KEY</label>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>Chave Anon (Public API Key)</label>
             <input
               type="password"
               required
@@ -168,12 +323,13 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
           </div>
 
           <button type="submit" className="btn" style={{ background: '#f59e0b', color: 'black', fontWeight: 800, fontSize: '0.85rem' }}>
-            Salvar e Conectar Supabase <Check size={16} />
+            Salvar e Aplicar Novas Credenciais <Check size={16} />
           </button>
         </form>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="glass-card">
+      {/* Main Login / Register Form */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }} className="glass-card">
         {error && (
           <div style={{
             background: 'var(--danger-glow)',
@@ -181,17 +337,18 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
             padding: '12px',
             borderRadius: 'var(--radius-sm)',
             fontSize: '0.85rem',
-            border: '1px solid rgba(239, 68, 68, 0.15)'
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            lineHeight: 1.4
           }}>
             {error}
           </div>
         )}
 
         {isSignUp && (
-          <div className="form-group">
-            <label className="form-label">Nome de Exibição</label>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>Nome de Exibição</label>
             <div style={{ position: 'relative' }}>
-              <User size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
+              <User size={18} style={{ position: 'absolute', left: '14px', top: '14px', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 required
@@ -205,10 +362,10 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
           </div>
         )}
 
-        <div className="form-group">
-          <label className="form-label">E-mail</label>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label" style={{ fontSize: '0.75rem' }}>E-mail</label>
           <div style={{ position: 'relative' }}>
-            <Mail size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
+            <Mail size={18} style={{ position: 'absolute', left: '14px', top: '14px', color: 'var(--text-muted)' }} />
             <input
               type="email"
               required
@@ -221,10 +378,10 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Senha</label>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label" style={{ fontSize: '0.75rem' }}>Senha</label>
           <div style={{ position: 'relative' }}>
-            <Lock size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
+            <Lock size={18} style={{ position: 'absolute', left: '14px', top: '14px', color: 'var(--text-muted)' }} />
             <input
               type="password"
               required
@@ -237,7 +394,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
           </div>
         </div>
 
-        <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
+        <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', marginTop: '6px' }}>
           {loading ? 'Processando...' : isSignUp ? (
             <>Cadastrar <UserPlus size={16} /></>
           ) : (
@@ -246,7 +403,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
         </button>
       </form>
 
-      <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', margin: '2px 0', gap: '8px' }}>
         <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ou</span>
         <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
@@ -303,22 +460,22 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, onSkip }) => {
         {isSignUp ? 'Cadastrar com GitHub' : 'Entrar com GitHub'}
       </button>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
         <button
           onClick={() => setIsSignUp(!isSignUp)}
-          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
         >
           {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem uma conta? Cadastre-se'}
         </button>
 
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ou</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ou</span>
 
         <button
           onClick={onSkip}
           className="btn btn-secondary"
-          style={{ width: '100%', gap: '8px' }}
+          style={{ width: '100%', gap: '8px', padding: '12px' }}
         >
-          Continuar como Visitante <ArrowRight size={16} />
+          Continuar como Visitante (100% Offline) <ArrowRight size={16} />
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import { supabase } from '../services/supabase';
 import { syncService } from '../services/sync';
 import { cloudSyncService } from '../services/cloudSync';
+import { userStorage } from '../services/userStorage';
 import { calculateSM2, calculateFibonacciSpacing } from '../services/sm2';
 import vocabPlanilha from '../data/vocabPlanilha.json';
 import { staticVocabulary } from '../data/vocabularyData';
@@ -410,7 +411,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
       }
       if (cloudData.customSongs) {
-        localStorage.setItem('hl_custom_songs', JSON.stringify(cloudData.customSongs));
+        userStorage.saveSongs(cloudData.customSongs);
       }
       if (cloudData.deletedPhraseIds) {
         localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
@@ -451,7 +452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
         }
         if (cloudData.customSongs && cloudData.customSongs.length > 0) {
-          localStorage.setItem('hl_custom_songs', JSON.stringify(cloudData.customSongs));
+          userStorage.saveSongs(cloudData.customSongs);
         }
         if (cloudData.deletedPhraseIds && cloudData.deletedPhraseIds.length > 0) {
           localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
