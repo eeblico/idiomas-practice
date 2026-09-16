@@ -306,10 +306,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
             onClick={() => handleNav('settings')}
             style={{
               width: '100%',
-              padding: '8px 12px',
+              padding: '10px 12px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '4px',
               fontSize: '0.75rem',
               fontWeight: 700,
               background: 'rgba(124, 58, 237, 0.1)',
@@ -320,11 +321,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
             }}
             title="Sincronizar entre celular e navegadores"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>☁️ Sincronizar</span>
-              <span style={{ fontSize: '0.7rem', opacity: 0.8, fontFamily: 'monospace' }}>{cloudSyncCode}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>☁️ Nuvem Offline</span>
+              <span style={{ fontSize: '0.7rem', textDecoration: 'underline', color: 'var(--accent)' }}>Conectar</span>
             </div>
-            <span style={{ fontSize: '0.7rem', textDecoration: 'underline' }}>Conectar</span>
+            <span style={{ fontSize: '0.68rem', opacity: 0.85, fontFamily: 'monospace', background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>
+              Código: {cloudSyncCode}
+            </span>
           </button>
         </div>
       )}
