@@ -353,14 +353,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (storedIsland) {
         setActiveIslandIdState(storedIsland);
       }
-      const storedCustom = localStorage.getItem('hl_custom_phrases');
-      if (storedCustom) {
-        setCustomPhrases(JSON.parse(storedCustom));
-      }
-      const storedCustomCats = localStorage.getItem('hl_custom_categories');
-      if (storedCustomCats) {
-        setCustomCategories(JSON.parse(storedCustomCats));
-      }
+      userStorage.getPhrases().then(phrases => {
+        if (phrases && phrases.length > 0) setCustomPhrases(phrases);
+      });
+      userStorage.getCategories().then(cats => {
+        if (cats && cats.length > 0) setCustomCategories(cats);
+      });
       
       const activeLang = storedLang || 'en';
       const langKey = `hl_recent_islands_${activeLang}`;

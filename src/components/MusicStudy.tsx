@@ -755,7 +755,10 @@ export const MusicStudy: React.FC = () => {
 
     // Save custom songs to userStorage (IndexedDB + localStorage) & Cloud DB
     const custom: Song[] = await userStorage.getSongs();
-    const updatedCustom = custom.map(s => s.id === activeSong.id ? updatedSong : s);
+    const exists = custom.some(s => s.id === activeSong.id);
+    const updatedCustom = exists
+      ? custom.map(s => s.id === activeSong.id ? updatedSong : s)
+      : [updatedSong, ...custom];
     await userStorage.saveSongs(updatedCustom);
     cloudSyncService.pushToCloud({ customSongs: updatedCustom });
 
@@ -956,21 +959,21 @@ export const MusicStudy: React.FC = () => {
     if (editingSongId) {
       // Edit Flow
       const custom: Song[] = await userStorage.getSongs();
-      const updated = custom.map(s => {
-        if (s.id === editingSongId) {
-          return {
-            ...s,
-            language_id: songLanguage || s.language_id || targetLanguage,
-            title: newTitle.trim(),
-            artist: newArtist.trim(),
-            youtube_url: newUrl.trim(),
-            lyrics: newLyrics.trim(),
-            translation: newTranslation.trim(),
-            explanations: newExplanations.trim()
-          };
-        }
-        return s;
-      });
+      const editedSong: Song = {
+        id: editingSongId,
+        language_id: songLanguage || targetLanguage,
+        title: newTitle.trim(),
+        artist: newArtist.trim(),
+        youtube_url: newUrl.trim(),
+        lyrics: newLyrics.trim(),
+        translation: newTranslation.trim(),
+        explanations: newExplanations.trim()
+      };
+      const exists = custom.some(s => s.id === editingSongId);
+      const updated = exists
+        ? custom.map(s => s.id === editingSongId ? editedSong : s)
+        : [editedSong, ...custom];
+
       await userStorage.saveSongs(updated);
       cloudSyncService.pushToCloud({ customSongs: updated });
 

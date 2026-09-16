@@ -125,6 +125,74 @@ export const userStorage = {
   },
 
   /**
+   * Save custom phrases to BOTH localStorage and IndexedDB
+   */
+  async savePhrases(phrases: any[]): Promise<void> {
+    try {
+      localStorage.setItem('hl_custom_phrases', JSON.stringify(phrases));
+    } catch (e) {
+      console.warn('[userStorage] localStorage quota error:', e);
+    }
+    await idbSet('hl_custom_phrases', phrases);
+  },
+
+  /**
+   * Get custom phrases from localStorage or restore from IndexedDB
+   */
+  async getPhrases(): Promise<any[]> {
+    try {
+      const stored = localStorage.getItem('hl_custom_phrases');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+
+    try {
+      const idbPhrases = await idbGet<any[]>('hl_custom_phrases');
+      if (idbPhrases && Array.isArray(idbPhrases) && idbPhrases.length > 0) {
+        try {
+          localStorage.setItem('hl_custom_phrases', JSON.stringify(idbPhrases));
+        } catch {}
+        return idbPhrases;
+      }
+    } catch {}
+
+    return [];
+  },
+
+  /**
+   * Save custom categories to BOTH localStorage and IndexedDB
+   */
+  async saveCategories(categories: any[]): Promise<void> {
+    try {
+      localStorage.setItem('hl_custom_categories', JSON.stringify(categories));
+    } catch (e) {
+      console.warn('[userStorage] localStorage quota error:', e);
+    }
+    await idbSet('hl_custom_categories', categories);
+  },
+
+  /**
+   * Get custom categories from localStorage or restore from IndexedDB
+   */
+  async getCategories(): Promise<any[]> {
+    try {
+      const stored = localStorage.getItem('hl_custom_categories');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+
+    try {
+      const idbCats = await idbGet<any[]>('hl_custom_categories');
+      if (idbCats && Array.isArray(idbCats) && idbCats.length > 0) {
+        try {
+          localStorage.setItem('hl_custom_categories', JSON.stringify(idbCats));
+        } catch {}
+        return idbCats;
+      }
+    } catch {}
+
+    return [];
+  },
+
+  /**
    * Export all user data as a JSON file downloadable by the user
    */
   async exportBackup(): Promise<string> {
