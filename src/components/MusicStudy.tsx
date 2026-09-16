@@ -349,7 +349,7 @@ export const MusicStudy: React.FC = () => {
       window.removeEventListener('focus', loadSongs);
       window.removeEventListener('storage', loadSongs);
     };
-  }, [addModalOpen]);
+  }, []);
 
   // Filtered catalog by current language or all languages
   const filteredSongs = useMemo(() => {
