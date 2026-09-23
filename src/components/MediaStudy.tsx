@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../services/supabase';
 import { cloudSyncService } from '../services/cloudSync';
+import { userStorage } from '../services/userStorage';
 import { 
   Video, Upload, Link2, Play, Pause, RotateCcw, 
   ChevronRight, ChevronLeft, Repeat, Volume2, Mic, Info, Star, Bookmark, Share2, 
@@ -143,8 +144,32 @@ const OFFLINE_DICTIONARY: Record<string, any> = {
   }
 };
 
-// --- 3 Pre-loaded High-Fidelity Lessons ---
+// --- Pre-loaded High-Fidelity Lessons ---
 const PRELOADED_LESSONS: Lesson[] = [
+  {
+    id: 'harry-potter-platform934',
+    title: 'Harry Potter - Plataforma 9¾ (Cena com Hagrid)',
+    description: 'Estude ritmo e entonação de diálogos de filme com lacunas e personagens.',
+    videoUrl: 'https://www.youtube.com/watch?v=1oW_WkWsZkg',
+    subtitles: [
+      {
+        id: 1,
+        start: 0.0,
+        end: 6.0,
+        text: "Hagrid: Blimey, is that the time? Now your train leaves in ten minutes. Here's your ticket. Stick to it, Harry. That's very important. Stick to your ticket.",
+        translation: "Hagrid: Caramba, já é essa hora? Seu trem parte em dez minutos. Aqui está seu bilhete. Guarde bem, Harry. É muito importante. Não perca seu bilhete.",
+        explanation: "Blimey = caramba (gíria britânica). Stick to it = mantenha com você / siga à risca."
+      },
+      {
+        id: 2,
+        start: 6.0,
+        end: 12.0,
+        text: "Harry Potter: But Hagrid, there must be a mistake. This says Platform 9¾. There's no such thing, is there?",
+        translation: "Harry Potter: Mas Hagrid, deve haver um engano. Aqui diz Plataforma 9¾. Não existe tal coisa, existe?",
+        explanation: "There must be a mistake = deve haver um engano. No such thing = não existe tal coisa."
+      }
+    ]
+  },
   {
     id: 'malcolm-phone',
     title: 'Malcolm in the Middle - Cena do Telefone',
@@ -574,6 +599,47 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
+  // --- Helper Functions for Google Drive and Speaker Detection ---
+  const isGoogleDriveUrl = (url: string) => {
+    return typeof url === 'string' && (url.includes('drive.google.com') || url.includes('docs.google.com'));
+  };
+
+  const getGoogleDriveEmbedUrl = (url: string) => {
+    if (!url) return '';
+    const matchFile = url.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
+    if (matchFile && matchFile[1]) {
+      return `https://drive.google.com/file/d/${matchFile[1]}/preview`;
+    }
+    const matchId = url.match(/[?&]id=([a-zA-Z0-9_-]{20,})/);
+    if (matchId && matchId[1]) {
+      return `https://drive.google.com/file/d/${matchId[1]}/preview`;
+    }
+    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+      const rawIdMatch = url.match(/([a-zA-Z0-9_-]{25,})/);
+      if (rawIdMatch && rawIdMatch[1]) {
+        return `https://drive.google.com/file/d/${rawIdMatch[1]}/preview`;
+      }
+    }
+    return url;
+  };
+
+  const parseSpeakerAndText = (text: string) => {
+    const match = text.match(/^([A-Za-z0-9\s.]+):\s*(.*)$/);
+    if (match) {
+      return { speaker: match[1].trim(), dialogue: match[2].trim() };
+    }
+    return { speaker: null, dialogue: text };
+  };
+
+  const getSpeakerColor = (speaker: string) => {
+    const s = speaker.toLowerCase();
+    if (s.includes('hagrid')) return '#f59e0b';
+    if (s.includes('harry')) return '#22c55e';
+    if (s.includes('malcolm')) return '#a855f7';
+    if (s.includes('francis')) return '#3b82f6';
+    return '#06b6d4';
+  };
+
   // --- Core States ---
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [customLessons, setCustomLessons] = useState<Lesson[]>(() => {
@@ -584,15 +650,45 @@ export const MediaStudy: React.FC = () => {
       return [];
     }
   });
+
+  // Dual persistent storage sync for custom shadowing lessons
+  useEffect(() => {
+    const syncLessons = async () => {
+      const stored = await userStorage.getLessons();
+      if (stored && stored.length > 0) {
+        setCustomLessons(stored);
+      }
+    };
+    syncLessons();
+  }, []);
   
   // Importer screen states
   const [importFormOpen, setImportFormOpen] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [rawTranscriptInput, setRawTranscriptInput] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [subtitleFile, setSubtitleFile] = useState<File | null>(null);
   const [importType, setImportType] = useState<'video' | 'audio'>('video');
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [loadingProgressText, setLoadingProgressText] = useState('');
+
+  // Shadowing View & Game Modes
+  const [shadowingViewMode, setShadowingViewMode] = useState<'dialogue' | 'cards'>('dialogue');
+  const [shadowingGameMode, setShadowingGameMode] = useState<'normal' | 'cloze' | 'reorder'>('normal');
+
+  // Cloze / Fill in the Gaps Game States
+  const [clozeUserAnswers, setClozeUserAnswers] = useState<Record<string, string>>({});
+  const [clozeChecked, setClozeChecked] = useState(false);
+  const [clozeScore, setClozeScore] = useState<{ correct: number; total: number } | null>(null);
+
+  // Word Reorder Game States
+  const [reorderSubId, setReorderSubId] = useState<number | null>(null);
+  const [reorderSelectedWords, setReorderSelectedWords] = useState<string[]>([]);
+  const [reorderSuccess, setReorderSuccess] = useState<boolean | null>(null);
+
+  // Transcript Edit Modal
+  const [isEditTranscriptModalOpen, setIsEditTranscriptModalOpen] = useState(false);
+  const [editTranscriptRawText, setEditTranscriptRawText] = useState('');
 
   // Custom subtitles update states
   const [isSubtitleConfigModalOpen, setIsSubtitleConfigModalOpen] = useState(false);
@@ -1189,7 +1285,7 @@ export const MediaStudy: React.FC = () => {
     return () => clearInterval(interval);
   }, [isPlaying, activeLesson?.id]);
 
-  // --- YouTube Subtitle Fetching API Parser ---
+  // --- YouTube / Google Drive / Local Media Import Parser ---
   const handleCustomImport = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -1199,80 +1295,97 @@ export const MediaStudy: React.FC = () => {
     setLoadingProgressText('Iniciando carregamento da mídia...');
 
     try {
-      if (youtubeUrl.trim()) {
-        const videoId = getYoutubeVideoId(youtubeUrl);
-        if (!videoId) {
-          alert('Link do YouTube inválido!');
-          setLoadingMedia(false);
-          return;
+      if (rawTranscriptInput.trim()) {
+        // User provided custom pasted transcript lines directly
+        const rawLines = rawTranscriptInput.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (rawLines.length > 0) {
+          loadedSubs = rawLines.map((line, idx) => ({
+            id: idx + 1,
+            start: idx * 4.0,
+            end: (idx + 1) * 4.0,
+            text: line,
+            translation: ''
+          }));
         }
+      }
 
-        srcUrl = youtubeUrl;
-        setLoadingProgressText('Buscando transcrição no youtube-transcript.ai...');
-
-        // 1. Fetch transcript from public CORS-enabled endpoint
-        const transcriptUrl = `https://youtube-transcript.ai/transcript/${videoId}.txt`;
-        const res = await fetch(transcriptUrl);
-        
-        if (res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n');
-          const tempSubs: { start: number; text: string }[] = [];
-
-          lines.forEach((line) => {
-            // Match timestamp in markdown [m:ss] or [h:mm:ss]
-            const match = line.match(/^\[(?:(\d+):)?(\d+):(\d+)\]\s*(.*)/);
-            if (match) {
-              const hours = match[1] ? parseInt(match[1]) : 0;
-              const minutes = parseInt(match[2]);
-              const seconds = parseInt(match[3]);
-              const start = hours * 3600 + minutes * 60 + seconds;
-              const subText = match[4].trim();
-              if (subText) {
-                tempSubs.push({ start, text: subText });
-              }
-            }
-          });
-
-          let subId = 1;
-          for (let i = 0; i < tempSubs.length; i++) {
-            const currentBlock = tempSubs[i];
-            const nextBlock = tempSubs[i + 1];
-            
-            // Calculate actual duration based on next block start time
-            const start = currentBlock.start;
-            const end = nextBlock ? nextBlock.start : start + 6.0;
-            const duration = end - start;
-
-            // Clean duplicates and split into smaller lines/cards
-            const cleanedText = cleanDuplicatePhrases(currentBlock.text);
-            const parts = splitSubtitleText(cleanedText);
-            
-            const totalChars = parts.reduce((sum, p) => sum + p.length, 0) || 1;
-            let currentStart = start;
-            
-            parts.forEach((part) => {
-              const partDur = duration * (part.length / totalChars);
-              loadedSubs.push({
-                id: subId++,
-                start: currentStart,
-                end: currentStart + partDur,
-                text: part,
-                translation: ''
-              });
-              currentStart += partDur;
-            });
+      if (youtubeUrl.trim()) {
+        if (isGoogleDriveUrl(youtubeUrl)) {
+          // Google Drive public embed
+          srcUrl = getGoogleDriveEmbedUrl(youtubeUrl);
+          setLoadingProgressText('Conectando ao Google Drive...');
+        } else {
+          const videoId = getYoutubeVideoId(youtubeUrl);
+          if (!videoId) {
+            alert('Link do YouTube ou Google Drive inválido!');
+            setLoadingMedia(false);
+            return;
           }
 
-          // Set end times dynamically
-          for (let i = 0; i < loadedSubs.length - 1; i++) {
-            loadedSubs[i].end = loadedSubs[i+1].start;
+          srcUrl = youtubeUrl;
+          if (loadedSubs.length === 0) {
+            setLoadingProgressText('Buscando transcrição no youtube-transcript.ai...');
+
+            // 1. Fetch transcript from public CORS-enabled endpoint
+            const transcriptUrl = `https://youtube-transcript.ai/transcript/${videoId}.txt`;
+            try {
+              const res = await fetch(transcriptUrl);
+              if (res.ok) {
+                const text = await res.text();
+                const lines = text.split('\n');
+                const tempSubs: { start: number; text: string }[] = [];
+
+                lines.forEach((line) => {
+                  const match = line.match(/^\[(?:(\d+):)?(\d+):(\d+)\]\s*(.*)/);
+                  if (match) {
+                    const hours = match[1] ? parseInt(match[1]) : 0;
+                    const minutes = parseInt(match[2]);
+                    const seconds = parseInt(match[3]);
+                    const start = hours * 3600 + minutes * 60 + seconds;
+                    const subText = match[4].trim();
+                    if (subText) {
+                      tempSubs.push({ start, text: subText });
+                    }
+                  }
+                });
+
+                let subId = 1;
+                for (let i = 0; i < tempSubs.length; i++) {
+                  const currentBlock = tempSubs[i];
+                  const nextBlock = tempSubs[i + 1];
+                  const start = currentBlock.start;
+                  const end = nextBlock ? nextBlock.start : start + 6.0;
+                  const duration = end - start;
+
+                  const cleanedText = cleanDuplicatePhrases(currentBlock.text);
+                  const parts = splitSubtitleText(cleanedText);
+                  const totalChars = parts.reduce((sum, p) => sum + p.length, 0) || 1;
+                  let currentStart = start;
+                  
+                  parts.forEach((part) => {
+                    const partDur = duration * (part.length / totalChars);
+                    loadedSubs.push({
+                      id: subId++,
+                      start: currentStart,
+                      end: currentStart + partDur,
+                      text: part,
+                      translation: ''
+                    });
+                    currentStart += partDur;
+                  });
+                }
+
+                for (let i = 0; i < loadedSubs.length - 1; i++) {
+                  loadedSubs[i].end = loadedSubs[i+1].start;
+                }
+              }
+            } catch {}
           }
         }
       } else if (mediaFile) {
         srcUrl = URL.createObjectURL(mediaFile);
         
-        if (subtitleFile) {
+        if (subtitleFile && loadedSubs.length === 0) {
           setLoadingProgressText('Lendo arquivo de legenda local...');
           const text = await subtitleFile.text();
           if (subtitleFile.name.endsWith('.srt')) {
@@ -1282,7 +1395,7 @@ export const MediaStudy: React.FC = () => {
           }
         }
       } else {
-        alert('Por favor, cole um link do YouTube ou envie um arquivo de mídia local!');
+        alert('Por favor, cole um link (YouTube ou Google Drive) ou envie um arquivo de mídia!');
         setLoadingMedia(false);
         return;
       }
@@ -1320,10 +1433,14 @@ export const MediaStudy: React.FC = () => {
         await saveFileToDB(newLessonId, mediaFile);
       }
 
+      const lessonTitle = isGoogleDriveUrl(youtubeUrl)
+        ? 'Vídeo Google Drive Importado'
+        : (mediaFile ? mediaFile.name : (youtubeUrl ? 'Vídeo YouTube Importado' : 'Mídia Importada'));
+
       const newLesson: Lesson = {
         id: newLessonId,
-        title: mediaFile ? mediaFile.name : 'YouTube Video Importado',
-        description: 'Estudo de vídeo customizado',
+        title: lessonTitle,
+        description: 'Estudo de vídeo/áudio personalizado com transcrição',
         videoUrl: srcUrl,
         subtitles: loadedSubs
       };
@@ -1332,11 +1449,13 @@ export const MediaStudy: React.FC = () => {
       const nextCustomLessons = [newLesson, ...customLessons];
       setCustomLessons(nextCustomLessons);
       localStorage.setItem('hl_custom_lessons', JSON.stringify(nextCustomLessons));
+      await userStorage.saveLessons(nextCustomLessons);
       cloudSyncService.pushToCloud({ customLessons: nextCustomLessons });
 
       setActiveLesson(newLesson);
       setImportFormOpen(false);
       setYoutubeUrl('');
+      setRawTranscriptInput('');
       setMediaFile(null);
       setSubtitleFile(null);
       setCurrentTime(0);
@@ -1433,11 +1552,100 @@ export const MediaStudy: React.FC = () => {
       alert('Legendas atualizadas com sucesso!');
     } catch (err) {
       console.error('Failed to update subtitles:', err);
-      alert('Ocorreu um erro ao processar as novas legendas.');
+      alert('Erro ao atualizar legendas.');
     } finally {
       setLoadingNewSubtitle(false);
       setNewSubProgressText('');
     }
+  };
+
+  // --- Shadowing Games & Transcript Edit Handlers ---
+  const handleCheckCloze = () => {
+    if (!activeLesson) return;
+    let correct = 0;
+    let total = 0;
+
+    activeLesson.subtitles.forEach((sub) => {
+      const { dialogue } = parseSpeakerAndText(sub.text);
+      const words = dialogue.split(/\s+/);
+      words.forEach((w, wIdx) => {
+        const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+        if (cleanW.length > 3) {
+          total++;
+          const userVal = (clozeUserAnswers[`${sub.id}-${wIdx}`] || '').trim().toLowerCase();
+          if (userVal === cleanW) {
+            correct++;
+          }
+        }
+      });
+    });
+
+    setClozeScore({ correct, total });
+    setClozeChecked(true);
+  };
+
+  const handleRevealCloze = () => {
+    if (!activeLesson) return;
+    const revealedAnswers: Record<string, string> = {};
+    activeLesson.subtitles.forEach((sub) => {
+      const { dialogue } = parseSpeakerAndText(sub.text);
+      const words = dialogue.split(/\s+/);
+      words.forEach((w, wIdx) => {
+        const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+        if (cleanW.length > 3) {
+          revealedAnswers[`${sub.id}-${wIdx}`] = cleanW;
+        }
+      });
+    });
+    setClozeUserAnswers(revealedAnswers);
+    setClozeChecked(true);
+  };
+
+  const handleOpenEditTranscriptModal = () => {
+    if (!activeLesson) return;
+    const fullText = activeLesson.subtitles.map(s => s.text).join('\n');
+    setEditTranscriptRawText(fullText);
+    setIsEditTranscriptModalOpen(true);
+  };
+
+  const handleSaveTranscriptEdits = async (newRawText: string) => {
+    if (!activeLesson) return;
+    const rawLines = newRawText.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    if (rawLines.length === 0) return;
+
+    let updatedSubs: Subtitle[] = rawLines.map((lineText, idx) => {
+      const existing = activeLesson.subtitles[idx];
+      return {
+        id: idx + 1,
+        start: existing ? existing.start : idx * 4.0,
+        end: existing ? existing.end : (idx + 1) * 4.0,
+        text: lineText,
+        translation: existing ? existing.translation : ''
+      };
+    });
+
+    // Translate missing lines
+    updatedSubs = await translateSubtitlesBatch(updatedSubs);
+
+    const updatedLesson: Lesson = {
+      ...activeLesson,
+      subtitles: updatedSubs
+    };
+
+    const existingIdx = customLessons.findIndex(l => l.id === activeLesson.id);
+    let nextCustomLessons: Lesson[];
+    if (existingIdx !== -1) {
+      nextCustomLessons = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+    } else {
+      nextCustomLessons = [updatedLesson, ...customLessons];
+    }
+
+    setActiveLesson(updatedLesson);
+    setCustomLessons(nextCustomLessons);
+    localStorage.setItem('hl_custom_lessons', JSON.stringify(nextCustomLessons));
+    await userStorage.saveLessons(nextCustomLessons);
+    cloudSyncService.pushToCloud({ customLessons: nextCustomLessons });
+    setIsEditTranscriptModalOpen(false);
   };
 
   // --- speech comparison logic (Dictation Comparison) ---
@@ -1855,18 +2063,39 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                 {/* URL Import */}
                 <div>
                   <label className="form-label" style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Link2 size={14} /> Link do Vídeo (YouTube)
+                    <Link2 size={14} /> Link do Vídeo (YouTube ou Google Drive público)
                   </label>
                   <input 
                     type="url"
                     className="input-text"
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="https://www.youtube.com/watch?v=... ou https://drive.google.com/file/d/.../view"
                     value={youtubeUrl}
                     onChange={(e) => {
                       setYoutubeUrl(e.target.value);
                       setMediaFile(null);
                     }}
                   />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    💡 Para vídeos do Google Drive, certifique-se de que o link esteja compartilhado como público ("Qualquer pessoa com o link").
+                  </span>
+                </div>
+
+                {/* Optional Raw Transcript Text Area */}
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📝 Transcrição / Texto das Sentenças (Opcional - cole as frases linha por linha)
+                  </label>
+                  <textarea
+                    className="input-text"
+                    rows={4}
+                    placeholder={`Exemplo:\nHagrid: Blimey, is that the time? Now your train leaves in ten minutes.\nHarry Potter: But Hagrid, there must be a mistake. This says Platform 9¾.`}
+                    value={rawTranscriptInput}
+                    onChange={(e) => setRawTranscriptInput(e.target.value)}
+                    style={{ resize: 'vertical', fontSize: '0.85rem', fontFamily: 'inherit' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    💡 Se você colar a transcrição aqui, cada linha será convertida automaticamente em uma sentença interativa para Shadowing e jogos!
+                  </span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -1911,7 +2140,7 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                   </div>
                 ) : (
                   <button type="submit" className="btn btn-primary" style={{ padding: '12px' }}>
-                    Processar e Importar Legendas
+                    Processar e Importar Mídia
                   </button>
                 )}
 
@@ -2078,6 +2307,17 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                   // YouTube embedded player target element
                   <div id="youtube-player-container" style={{ width: '100%', height: isTheaterFullscreen ? '0' : (isCinemaMode ? '380px' : '240px'), flex: isTheaterFullscreen ? 1 : 'none', background: 'black', transition: 'height 0.3s ease' }}>
                     <div id="youtube-player-iframe"></div>
+                  </div>
+                ) : isGoogleDriveUrl(activeLesson.videoUrl) ? (
+                  // Google Drive video embedded player
+                  <div style={{ width: '100%', height: isTheaterFullscreen ? '0' : (isCinemaMode ? '380px' : '280px'), flex: isTheaterFullscreen ? 1 : 'none', background: 'black', transition: 'height 0.3s ease' }}>
+                    <iframe
+                      src={getGoogleDriveEmbedUrl(activeLesson.videoUrl)}
+                      style={{ width: '100%', height: '100%', border: 'none' }}
+                      allow="autoplay; encrypted-media"
+                      allowFullScreen
+                      title="Google Drive Video"
+                    />
                   </div>
                 ) : (
                   // HTML5 video element player with play/pause click overlay
@@ -2528,9 +2768,91 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                 )}
               </div>
 
-              {/* Subtitles Toolbar Toggles - Row 1 */}
-              <div style={{ display: 'flex', gap: '10px', padding: '0 4px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>Legendas:</span>
+              {/* Subtitles Toolbar Toggles - Row 1 & Shadowing Controls */}
+              <div style={{ display: 'flex', gap: '8px', padding: '0 4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* View Mode Selector */}
+                <button
+                  onClick={() => setShadowingViewMode(prev => prev === 'dialogue' ? 'cards' : 'dialogue')}
+                  style={{
+                    background: shadowingViewMode === 'dialogue' ? 'linear-gradient(135deg, rgba(234,179,8,0.2) 0%, rgba(234,179,8,0.05) 100%)' : 'rgba(255,255,255,0.03)',
+                    border: shadowingViewMode === 'dialogue' ? '1px solid #eab308' : '1px solid var(--border)',
+                    color: shadowingViewMode === 'dialogue' ? '#eab308' : 'var(--text-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Alternar entre Diálogo Contínuo (Estilo CineTeach) e Cards Individuais"
+                >
+                  💬 {shadowingViewMode === 'dialogue' ? 'Modo Diálogo' : 'Modo Cards'}
+                </button>
+
+                {/* Game Mode Selector */}
+                <button
+                  onClick={() => setShadowingGameMode(prev => prev === 'cloze' ? 'normal' : 'cloze')}
+                  style={{
+                    background: shadowingGameMode === 'cloze' ? 'linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.05) 100%)' : 'rgba(255,255,255,0.03)',
+                    border: shadowingGameMode === 'cloze' ? '1px solid #22c55e' : '1px solid var(--border)',
+                    color: shadowingGameMode === 'cloze' ? '#22c55e' : 'var(--text-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Ativar Jogo de Preencher Lacunas / Letra Oculta"
+                >
+                  🎮 {shadowingGameMode === 'cloze' ? 'Lacunas Ativas' : 'Jogo de Lacunas'}
+                </button>
+
+                <button
+                  onClick={() => setShadowingGameMode(prev => prev === 'reorder' ? 'normal' : 'reorder')}
+                  style={{
+                    background: shadowingGameMode === 'reorder' ? 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(168,85,247,0.05) 100%)' : 'rgba(255,255,255,0.03)',
+                    border: shadowingGameMode === 'reorder' ? '1px solid #a855f7' : '1px solid var(--border)',
+                    color: shadowingGameMode === 'reorder' ? '#a855f7' : 'var(--text-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Ativar Jogo de Reorganizar Palavras da Frase"
+                >
+                  🧩 {shadowingGameMode === 'reorder' ? 'Reorganizar Ativo' : 'Reorganizar'}
+                </button>
+
+                {/* Edit Transcript Button */}
+                <button
+                  onClick={handleOpenEditTranscriptModal}
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Editar/Ajustar o texto da transcrição completo"
+                >
+                  ✏️ Ajustar Texto
+                </button>
+
                 <button
                   onClick={() => setHideOriginals(prev => !prev)}
                   style={{
@@ -2595,7 +2917,7 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                   title="Configurar/Enviar nova legenda (.srt/.lrc) para este vídeo"
                 >
                   <Upload size={12} />
-                  Legenda
+                  Legenda SRT
                 </button>
 
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -2706,8 +3028,276 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                 </div>
               </div>
 
-              {/* Subtitles scrolling list */}
-              <div className="subtitles-scroll-panel" ref={subtitleScrollRef} style={{ flex: 1, minHeight: 0 }}>
+              {/* Subtitles Container: Dialogue Continuous View OR Individual Cards View */}
+              {shadowingViewMode === 'dialogue' ? (
+                <div className="glass-card" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(15, 17, 26, 0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {/* Mode Header Banner */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent)' }}>
+                        {shadowingGameMode === 'cloze' ? '🎮 Jogo de Lacunas (Cloze Recall)' : (shadowingGameMode === 'reorder' ? '🧩 Jogo de Reordenar Palavras' : '💬 Roteiro de Diálogo Contínuo (CineTeach)')}
+                      </span>
+                    </div>
+                    {shadowingGameMode === 'cloze' && (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {clozeScore && (
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: clozeScore.correct === clozeScore.total ? '#22c55e' : '#f59e0b' }}>
+                            Acertos: {clozeScore.correct} / {clozeScore.total}
+                          </span>
+                        )}
+                        <button 
+                          onClick={handleCheckCloze}
+                          className="btn btn-primary"
+                          style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
+                        >
+                          Verificar Respostas
+                        </button>
+                        <button 
+                          onClick={handleRevealCloze}
+                          className="btn btn-secondary"
+                          style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
+                        >
+                          Revelar Todas
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sentences Script List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {adjustedSubtitles.map((sub) => {
+                      const isActive = lastActiveSubtitle?.id === sub.id;
+                      const { speaker, dialogue } = parseSpeakerAndText(sub.text);
+                      const speakerColor = speaker ? getSpeakerColor(speaker) : '#06b6d4';
+                      const words = dialogue.split(/\s+/);
+
+                      return (
+                        <div 
+                          key={sub.id}
+                          style={{
+                            padding: '12px 14px',
+                            borderRadius: '8px',
+                            background: isActive ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                            border: isActive ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.05)',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}
+                        >
+                          {/* Top row: Speaker & Quick Actions */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {speaker ? (
+                                <span style={{
+                                  fontSize: '0.8rem',
+                                  fontWeight: 800,
+                                  color: speakerColor,
+                                  background: `${speakerColor}20`,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  border: `1px solid ${speakerColor}50`
+                                }}>
+                                  {speaker}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Frase #{sub.id}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                                {formatTime(sub.start)}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <button
+                                onClick={() => seekTo(sub.start + 0.1)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
+                                title="Ouvir esta frase"
+                              >
+                                <Play size={13} />
+                              </button>
+                              <button
+                                onClick={() => speakWord(dialogue)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
+                                title="Pronúncia da IA"
+                              >
+                                <Volume2 size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleAddAsCustomPhrase(sub)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
+                                title="Salvar na Ilha de Vocabulário"
+                              >
+                                <Plus size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Content: Depending on game mode */}
+                          {shadowingGameMode === 'cloze' ? (
+                            <div style={{ fontSize: '1rem', lineHeight: 1.6, color: 'white', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                              {words.map((w, wIdx) => {
+                                const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+                                const isGap = cleanW.length > 3;
+                                const key = `${sub.id}-${wIdx}`;
+                                const userVal = clozeUserAnswers[key] || '';
+                                const isCorrect = userVal.trim().toLowerCase() === cleanW;
+
+                                if (!isGap) {
+                                  return <span key={wIdx}>{w}</span>;
+                                }
+
+                                return (
+                                  <span key={wIdx} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    <input
+                                      type="text"
+                                      value={userVal}
+                                      placeholder="____"
+                                      onChange={(e) => setClozeUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                                      style={{
+                                        width: `${Math.max(cleanW.length * 10, 48)}px`,
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '0.9rem',
+                                        textAlign: 'center',
+                                        fontWeight: 700,
+                                        outline: 'none',
+                                        border: clozeChecked ? (isCorrect ? '2px solid #22c55e' : '2px solid #ef4444') : '1px solid rgba(255,255,255,0.2)',
+                                        background: clozeChecked ? (isCorrect ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)') : 'rgba(0,0,0,0.3)',
+                                        color: clozeChecked ? (isCorrect ? '#4ade80' : '#f87171') : 'white'
+                                      }}
+                                    />
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : shadowingGameMode === 'reorder' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {reorderSubId === sub.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                  {/* Target sentence construction line */}
+                                  <div style={{ minHeight: '36px', padding: '6px 10px', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', border: '1px dashed rgba(255,255,255,0.2)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                    {reorderSelectedWords.length === 0 ? (
+                                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Clique nas palavras abaixo na ordem correta...</span>
+                                    ) : (
+                                      reorderSelectedWords.map((word, wIdx) => (
+                                        <span
+                                          key={wIdx}
+                                          onClick={() => {
+                                            const next = [...reorderSelectedWords];
+                                            next.splice(wIdx, 1);
+                                            setReorderSelectedWords(next);
+                                          }}
+                                          style={{ padding: '3px 8px', background: 'var(--accent)', color: 'black', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+                                          title="Clique para remover"
+                                        >
+                                          {word}
+                                        </span>
+                                      ))
+                                    )}
+                                  </div>
+
+                                  {/* Scrambled word bank */}
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {words.map((w, wIdx) => {
+                                      const isUsed = reorderSelectedWords.filter(x => x === w).length >= words.filter(x => x === w).length;
+                                      return (
+                                        <button
+                                          key={wIdx}
+                                          disabled={isUsed}
+                                          onClick={() => {
+                                            const next = [...reorderSelectedWords, w];
+                                            setReorderSelectedWords(next);
+                                            if (next.join(' ').toLowerCase() === dialogue.toLowerCase()) {
+                                              setReorderSuccess(true);
+                                            }
+                                          }}
+                                          style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 600,
+                                            cursor: isUsed ? 'not-allowed' : 'pointer',
+                                            opacity: isUsed ? 0.3 : 1,
+                                            background: 'rgba(255,255,255,0.1)',
+                                            border: '1px solid rgba(255,255,255,0.15)',
+                                            color: 'white'
+                                          }}
+                                        >
+                                          {w}
+                                        </button>
+                                      );
+                                    })}
+                                    <button
+                                      onClick={() => {
+                                        setReorderSelectedWords([]);
+                                        setReorderSuccess(null);
+                                      }}
+                                      style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                    >
+                                      Reiniciar
+                                    </button>
+                                  </div>
+
+                                  {reorderSuccess && (
+                                    <span style={{ fontSize: '0.85rem', color: '#22c55e', fontWeight: 700 }}>
+                                      ✨ Perfeito! Sentença montada corretamente!
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setReorderSubId(sub.id);
+                                    setReorderSelectedWords([]);
+                                    setReorderSuccess(null);
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ alignSelf: 'flex-start', padding: '4px 10px', fontSize: '0.75rem' }}
+                                >
+                                  🧩 Jogar esta frase
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            /* Normal Dialogue Script view */
+                            <div style={{ fontSize: '1.05rem', fontWeight: 600, color: subtitleColor, lineHeight: 1.45 }}>
+                              {words.map((w, wIdx) => {
+                                const cleanedW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+                                const isWordSelected = selectedWord === cleanedW && selectedWordContext === sub.text;
+                                return (
+                                  <span
+                                    key={wIdx}
+                                    className={`subtitle-word ${isWordSelected ? 'selected' : ''}`}
+                                    style={{ color: isWordSelected ? 'var(--accent)' : subtitleColor, marginRight: `${wordSpacing}px`, display: 'inline-block', cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleWordClick(w, sub.text);
+                                    }}
+                                  >
+                                    {w}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Translation Line */}
+                          {sub.translation && (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                              {sub.translation}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* Subtitles scrolling list */
+                <div className="subtitles-scroll-panel" ref={subtitleScrollRef} style={{ flex: 1, minHeight: 0 }}>
                 {adjustedSubtitles.map((sub, idx) => {
                   const isActive = lastActiveSubtitle?.id === sub.id;
                   const isOriginalHidden = (hideOriginals || individuallyHiddenCards[sub.id]) && !revealedCards[sub.id];
@@ -3169,6 +3759,7 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                   );
                 })}
               </div>
+              )}
             </div>
 
             {/* Collapsible Right Sidebar Panel */}
@@ -3584,6 +4175,56 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                   Substituir Legendas
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transcript Modal */}
+      {isEditTranscriptModalOpen && (
+        <div className="practice-modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="practice-modal-content" style={{ maxWidth: '600px', width: '90%' }}>
+            <div className="practice-modal-header">
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ✏️ Ajustar / Editar Texto da Transcrição
+              </h3>
+              <button 
+                onClick={() => setIsEditTranscriptModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="practice-modal-body" style={{ gap: '16px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                Edite as sentenças do vídeo abaixo. Cada linha corresponderá a uma sentença interativa para estudo e sincronização.
+              </p>
+
+              <textarea
+                className="input-text"
+                rows={12}
+                value={editTranscriptRawText}
+                onChange={(e) => setEditTranscriptRawText(e.target.value)}
+                style={{ width: '100%', resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', lineHeight: 1.5 }}
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button
+                  onClick={() => setIsEditTranscriptModalOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 16px' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleSaveTranscriptEdits(editTranscriptRawText)}
+                  className="btn btn-primary"
+                  style={{ padding: '8px 16px' }}
+                >
+                  Salvar Alterações
+                </button>
+              </div>
             </div>
           </div>
         </div>

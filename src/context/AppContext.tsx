@@ -435,10 +435,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (cloudData.customPhrases && cloudData.customPhrases.length > 0) {
           setCustomPhrases(cloudData.customPhrases);
           localStorage.setItem('hl_custom_phrases', JSON.stringify(cloudData.customPhrases));
+          await userStorage.savePhrases(cloudData.customPhrases);
         }
         if (cloudData.customCategories && cloudData.customCategories.length > 0) {
           setCustomCategories(cloudData.customCategories);
           localStorage.setItem('hl_custom_categories', JSON.stringify(cloudData.customCategories));
+          await userStorage.saveCategories(cloudData.customCategories);
         }
         if (cloudData.categoryOverrides && Object.keys(cloudData.categoryOverrides).length > 0) {
           localStorage.setItem('hl_category_overrides', JSON.stringify(cloudData.categoryOverrides));
@@ -448,9 +450,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (cloudData.customLessons && cloudData.customLessons.length > 0) {
           localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
+          await userStorage.saveLessons(cloudData.customLessons);
         }
         if (cloudData.customSongs && cloudData.customSongs.length > 0) {
-          userStorage.saveSongs(cloudData.customSongs);
+          await userStorage.saveSongs(cloudData.customSongs);
         }
         if (cloudData.deletedPhraseIds && cloudData.deletedPhraseIds.length > 0) {
           localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
@@ -460,6 +463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem(LOCAL_GUEST_KEY, JSON.stringify(cloudData.guestProgress));
         }
         setCloudSyncStatus('synced');
+        refreshCatalog();
       } else {
         // Push initial local state to cloud if empty
         cloudSyncService.pushToCloud({
@@ -990,6 +994,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = [...customPhrases, newPhrase];
     setCustomPhrases(nextCustom);
     localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+    await userStorage.savePhrases(nextCustom);
     cloudSyncService.pushToCloud({ customPhrases: nextCustom });
 
     // 2. Try to save to Supabase if admin
@@ -1058,6 +1063,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = [...customPhrases, ...newPhrases];
     setCustomPhrases(nextCustom);
     localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+    await userStorage.savePhrases(nextCustom);
+    cloudSyncService.pushToCloud({ customPhrases: nextCustom });
 
     // 2. Queue all phraseIds for local review in batch
     const phraseIds = newPhrases.map(p => p.id);
@@ -1125,6 +1132,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextCustom = customPhrases.map(p => p.id === phraseId ? { ...p, ...updatedFields } : p);
       setCustomPhrases(nextCustom);
       localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+      userStorage.savePhrases(nextCustom);
+      cloudSyncService.pushToCloud({ customPhrases: nextCustom, phraseOverrides: nextOverrides });
     }
   };
 
@@ -1168,6 +1177,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (customChanged) {
       setCustomPhrases(nextCustom);
       localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+      userStorage.savePhrases(nextCustom);
+      cloudSyncService.pushToCloud({ customPhrases: nextCustom });
     }
   };
 
@@ -1253,6 +1264,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = customPhrases.filter(p => p.id !== phraseId);
     setCustomPhrases(nextCustom);
     localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustom));
+    userStorage.savePhrases(nextCustom);
+    cloudSyncService.pushToCloud({ customPhrases: nextCustom, deletedPhraseIds: nextDeleted });
   };
 
   const addCustomCategory = async (name: string, description: string): Promise<string> => {
@@ -1265,6 +1278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustom = [...customCategories, newCategory];
     setCustomCategories(nextCustom);
     localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustom));
+    await userStorage.saveCategories(nextCustom);
     cloudSyncService.pushToCloud({ customCategories: nextCustom });
     return newCategory.id;
   };
@@ -1281,6 +1295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       nextCustomCats = customCategories.map(c => c.id === categoryId ? { ...c, name, description: formattedDesc } : c);
       setCustomCategories(nextCustomCats);
       localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustomCats));
+      await userStorage.saveCategories(nextCustomCats);
     }
 
     // 2. Persist override locally for built-in categories
@@ -1303,10 +1318,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextCustomCats = customCategories.filter(c => c.id !== categoryId);
     setCustomCategories(nextCustomCats);
     localStorage.setItem('hl_custom_categories', JSON.stringify(nextCustomCats));
+    await userStorage.saveCategories(nextCustomCats);
 
     const nextCustomPhrases = customPhrases.filter(p => p.category_id !== categoryId);
     setCustomPhrases(nextCustomPhrases);
     localStorage.setItem('hl_custom_phrases', JSON.stringify(nextCustomPhrases));
+    await userStorage.savePhrases(nextCustomPhrases);
 
     if (activeIslandId === categoryId) {
       setActiveIslandId(null);

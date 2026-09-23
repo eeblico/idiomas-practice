@@ -193,6 +193,40 @@ export const userStorage = {
   },
 
   /**
+   * Save custom lessons (Shadowing videos/transcripts) to BOTH localStorage and IndexedDB
+   */
+  async saveLessons(lessons: any[]): Promise<void> {
+    try {
+      localStorage.setItem('hl_custom_lessons', JSON.stringify(lessons));
+    } catch (e) {
+      console.warn('[userStorage] localStorage quota error:', e);
+    }
+    await idbSet('hl_custom_lessons', lessons);
+  },
+
+  /**
+   * Get custom lessons from localStorage or restore from IndexedDB
+   */
+  async getLessons(): Promise<any[]> {
+    try {
+      const stored = localStorage.getItem('hl_custom_lessons');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+
+    try {
+      const idbLessons = await idbGet<any[]>('hl_custom_lessons');
+      if (idbLessons && Array.isArray(idbLessons) && idbLessons.length > 0) {
+        try {
+          localStorage.setItem('hl_custom_lessons', JSON.stringify(idbLessons));
+        } catch {}
+        return idbLessons;
+      }
+    } catch {}
+
+    return [];
+  },
+
+  /**
    * Export all user data as a JSON file downloadable by the user
    */
   async exportBackup(): Promise<string> {
