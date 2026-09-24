@@ -19,7 +19,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
     reviewsDueCount,
     theme,
     toggleTheme,
-    cloudSyncCode
+    cloudSyncCode,
+    cloudSyncStatus,
+    forceSyncCloud
   } = useApp();
 
   const [langPickerOpen, setLangPickerOpen] = useState(false);
@@ -312,18 +314,44 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, setMobileOpen, col
               alignItems: 'flex-start',
               gap: '4px',
               fontSize: '0.75rem',
-              fontWeight: 700,
-              background: 'rgba(124, 58, 237, 0.1)',
-              color: 'var(--accent)',
-              border: '1px solid rgba(124, 58, 237, 0.25)',
+              fontWeight: 750,
+              background: cloudSyncStatus === 'synced' 
+                ? 'rgba(16, 185, 129, 0.12)' 
+                : cloudSyncStatus === 'syncing' 
+                ? 'rgba(245, 158, 11, 0.12)' 
+                : 'rgba(124, 58, 237, 0.1)',
+              color: cloudSyncStatus === 'synced' 
+                ? '#10b981' 
+                : cloudSyncStatus === 'syncing' 
+                ? '#f59e0b' 
+                : 'var(--accent)',
+              border: `1px solid ${
+                cloudSyncStatus === 'synced' 
+                  ? 'rgba(16, 185, 129, 0.3)' 
+                  : cloudSyncStatus === 'syncing' 
+                  ? 'rgba(245, 158, 11, 0.3)' 
+                  : 'rgba(124, 58, 237, 0.25)'
+              }`,
               borderRadius: 'var(--radius-md)',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              transition: 'all 0.2s'
             }}
             title="Sincronizar entre celular e navegadores"
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>☁️ Nuvem Offline</span>
-              <span style={{ fontSize: '0.7rem', textDecoration: 'underline', color: 'var(--accent)' }}>Conectar</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {cloudSyncStatus === 'synced' && '☁️ Nuvem Conectada'}
+                {cloudSyncStatus === 'syncing' && '🔄 Sincronizando...'}
+                {cloudSyncStatus === 'offline' && '☁️ Nuvem Offline'}
+              </span>
+              <span style={{ 
+                fontSize: '0.7rem', 
+                textDecoration: cloudSyncStatus === 'synced' ? 'none' : 'underline',
+                fontWeight: 600,
+                color: cloudSyncStatus === 'synced' ? '#10b981' : undefined
+              }}>
+                {cloudSyncStatus === 'synced' ? '✓ OK' : cloudSyncStatus === 'syncing' ? '...' : 'Conectar'}
+              </span>
             </div>
             <span style={{ fontSize: '0.68rem', opacity: 0.85, fontFamily: 'monospace', background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>
               Código: {cloudSyncCode}

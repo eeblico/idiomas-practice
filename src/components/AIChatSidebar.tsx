@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, AVAILABLE_LANGUAGES, Category, Phrase } from '../context/AppContext';
+import { userStorage } from '../services/userStorage';
+import { cloudSyncService } from '../services/cloudSync';
 import { 
   Sparkles, X, Send, Trash2, Plus, ArrowRight, Loader2, 
   FolderPlus, AlertCircle, Copy, Check, MessageSquare, BookOpen,
@@ -137,52 +139,62 @@ export const AIChatSidebar: React.FC = () => {
   // Load target language details
   const activeLang = AVAILABLE_LANGUAGES.find(l => l.id === targetLanguage) || AVAILABLE_LANGUAGES[0];
 
-  // Auto-close chat if active tab changes to non-supported one
+  // Load chat sessions from userStorage (IndexedDB + localStorage)
   useEffect(() => {
-    if (activeTab !== 'resources' && activeTab !== 'islands') {
-      setIsOpen(false);
-    }
-  }, [activeTab]);
+    let isCancelled = false;
 
-  // Load chat sessions from localStorage
-  useEffect(() => {
-    try {
-      const storedSessions = localStorage.getItem(`hl_chat_sessions_${targetLanguage}`);
-      const storedActiveId = localStorage.getItem(`hl_active_session_id_${targetLanguage}`);
-      
-      let parsedSessions: ChatSession[] = [];
-      if (storedSessions) {
-        parsedSessions = JSON.parse(storedSessions);
+    const loadSessions = async () => {
+      try {
+        const loaded = await userStorage.getChatSessions(targetLanguage);
+        const storedActiveId = localStorage.getItem(`hl_active_session_id_${targetLanguage}`);
+        
+        let parsedSessions: ChatSession[] = loaded || [];
+
+        if (parsedSessions.length === 0) {
+          const raw = localStorage.getItem(`hl_chat_sessions_${targetLanguage}`);
+          if (raw) {
+            try { parsedSessions = JSON.parse(raw); } catch {}
+          }
+        }
+
+        if (parsedSessions.length === 0) {
+          // Create an initial default session
+          const initialSession: ChatSession = {
+            id: 'session_' + Math.random().toString(36).substring(2, 9),
+            title: 'Conversa Inicial',
+            messages: [],
+            timestamp: Date.now()
+          };
+          parsedSessions = [initialSession];
+          await userStorage.saveChatSessions(targetLanguage, parsedSessions);
+        }
+
+        if (isCancelled) return;
+
+        setSessions(parsedSessions);
+
+        const activeId = storedActiveId && parsedSessions.some(s => s.id === storedActiveId)
+          ? storedActiveId 
+          : parsedSessions[0].id;
+        
+        setActiveSessionId(activeId);
+        localStorage.setItem(`hl_active_session_id_${targetLanguage}`, activeId);
+
+        const activeSession = parsedSessions.find(s => s.id === activeId);
+        if (activeSession) {
+          setMessages(activeSession.messages);
+        }
+      } catch (e) {
+        console.error('Failed to load chat sessions', e);
       }
+    };
 
-      if (parsedSessions.length === 0) {
-        // Create an initial default session
-        const initialSession: ChatSession = {
-          id: 'session_' + Math.random().toString(36).substring(2, 9),
-          title: 'Conversa Inicial',
-          messages: [],
-          timestamp: Date.now()
-        };
-        parsedSessions = [initialSession];
-        localStorage.setItem(`hl_chat_sessions_${targetLanguage}`, JSON.stringify(parsedSessions));
-      }
+    loadSessions();
 
-      setSessions(parsedSessions);
-
-      const activeId = storedActiveId && parsedSessions.some(s => s.id === storedActiveId)
-        ? storedActiveId 
-        : parsedSessions[0].id;
-      
-      setActiveSessionId(activeId);
-      localStorage.setItem(`hl_active_session_id_${targetLanguage}`, activeId);
-
-      const activeSession = parsedSessions.find(s => s.id === activeId);
-      if (activeSession) {
-        setMessages(activeSession.messages);
-      }
-    } catch (e) {
-      console.error('Failed to load chat sessions', e);
-    }
+    const handleCloudSyncDone = () => {
+      loadSessions();
+    };
+    window.addEventListener('cloud_sync_completed', handleCloudSyncDone);
 
     // Reset view states when targetLanguage changes
     setActiveImportMsgId(null);
@@ -195,6 +207,11 @@ export const AIChatSidebar: React.FC = () => {
     setIsBatchMode(false);
     setSelectedMessageIds(new Set());
     setShowBatchSaveForm(false);
+
+    return () => {
+      isCancelled = true;
+      window.removeEventListener('cloud_sync_completed', handleCloudSyncDone);
+    };
   }, [targetLanguage]);
 
   // Listen for open/toggle AI Chat events from navigation (e.g. mobile bottom nav)
@@ -223,7 +240,7 @@ export const AIChatSidebar: React.FC = () => {
     }
   }, [isIslandsPanelOpen]); // Reload when panel opens to get latest additions
 
-  // Save current messages to active session in state and localStorage
+  // Save current messages to active session in state, IndexedDB and Cloud Sync
   const updateSessionMessages = (updatedMessages: ChatMessage[]) => {
     setMessages(updatedMessages);
     
@@ -250,7 +267,12 @@ export const AIChatSidebar: React.FC = () => {
     });
 
     setSessions(updatedSessions);
-    localStorage.setItem(`hl_chat_sessions_${targetLanguage}`, JSON.stringify(updatedSessions));
+    userStorage.saveChatSessions(targetLanguage, updatedSessions);
+    cloudSyncService.pushToCloud({
+      chatSessions: {
+        [targetLanguage]: updatedSessions
+      }
+    }).catch(err => console.warn('[AIChatSidebar] Cloud push failed:', err));
   };
 
   // Scroll to bottom when messages or loading state changes
@@ -291,7 +313,12 @@ export const AIChatSidebar: React.FC = () => {
 
     const nextSessions = [newSession, ...sessions];
     setSessions(nextSessions);
-    localStorage.setItem(`hl_chat_sessions_${targetLanguage}`, JSON.stringify(nextSessions));
+    userStorage.saveChatSessions(targetLanguage, nextSessions);
+    cloudSyncService.pushToCloud({
+      chatSessions: {
+        [targetLanguage]: nextSessions
+      }
+    }).catch(err => console.warn('[AIChatSidebar] Cloud push failed:', err));
     
     setActiveSessionId(newSession.id);
     localStorage.setItem(`hl_active_session_id_${targetLanguage}`, newSession.id);
@@ -331,7 +358,12 @@ export const AIChatSidebar: React.FC = () => {
     if (confirm('Deseja realmente apagar esta conversa?')) {
       const nextSessions = sessions.filter(s => s.id !== sessionId);
       setSessions(nextSessions);
-      localStorage.setItem(`hl_chat_sessions_${targetLanguage}`, JSON.stringify(nextSessions));
+      userStorage.saveChatSessions(targetLanguage, nextSessions);
+      cloudSyncService.pushToCloud({
+        chatSessions: {
+          [targetLanguage]: nextSessions
+        }
+      }).catch(err => console.warn('[AIChatSidebar] Cloud push failed:', err));
 
       if (activeSessionId === sessionId) {
         const fallbackSession = nextSessions[0];
@@ -825,11 +857,6 @@ Regras:
              p.category.toLowerCase().includes(promptSearchQuery.toLowerCase());
     });
   };
-
-  // Only render assistant button and panel if in 'resources' or 'islands' tabs
-  if (activeTab !== 'resources' && activeTab !== 'islands') {
-    return null;
-  }
 
   return (
     <>

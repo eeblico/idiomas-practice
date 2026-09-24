@@ -11,6 +11,7 @@ export interface CloudUserData {
   phraseOverrides: Record<string, any>;
   customLessons: any[];
   customSongs: any[];
+  chatSessions?: Record<string, any[]>;
   deletedPhraseIds: string[];
   guestProgress: any;
   updated_at: string;
@@ -47,6 +48,17 @@ export const cloudSyncService = {
   async pushToCloud(data: Partial<CloudUserData>): Promise<boolean> {
     const syncCode = this.getSyncCode();
     try {
+      const chatMap: Record<string, any[]> = data.chatSessions ?? (() => {
+        const map: Record<string, any[]> = {};
+        ['en', 'es', 'fr', 'de', 'it', 'zh'].forEach(l => {
+          try {
+            const s = localStorage.getItem(`hl_chat_sessions_${l}`);
+            if (s) map[l] = JSON.parse(s);
+          } catch {}
+        });
+        return map;
+      })();
+
       const payload = {
         sync_code: syncCode,
         data_json: {
@@ -56,6 +68,7 @@ export const cloudSyncService = {
           phraseOverrides: data.phraseOverrides ?? JSON.parse(localStorage.getItem('hl_phrase_overrides') || '{}'),
           customLessons: data.customLessons ?? JSON.parse(localStorage.getItem('hl_custom_lessons') || '[]'),
           customSongs: data.customSongs ?? JSON.parse(localStorage.getItem('hl_custom_songs') || '[]'),
+          chatSessions: chatMap,
           deletedPhraseIds: data.deletedPhraseIds ?? JSON.parse(localStorage.getItem('hl_deleted_phrases') || '[]'),
           guestProgress: data.guestProgress ?? JSON.parse(localStorage.getItem('hl_guest_progress') || '{}'),
         },
@@ -102,6 +115,7 @@ export const cloudSyncService = {
           phraseOverrides: data.data_json.phraseOverrides || {},
           customLessons: data.data_json.customLessons || [],
           customSongs: data.data_json.customSongs || [],
+          chatSessions: data.data_json.chatSessions || {},
           deletedPhraseIds: data.data_json.deletedPhraseIds || [],
           guestProgress: data.data_json.guestProgress || {},
           updated_at: data.updated_at || new Date().toISOString()
@@ -125,6 +139,7 @@ export const cloudSyncService = {
           phraseOverrides: s.phraseOverrides || {},
           customLessons: s.customLessons || [],
           customSongs: s.customSongs || [],
+          chatSessions: s.chatSessions || {},
           deletedPhraseIds: s.deletedPhraseIds || [],
           guestProgress: s.guestProgress || {},
           updated_at: new Date().toISOString()
@@ -150,6 +165,7 @@ export const cloudSyncService = {
             phraseOverrides: latestData.data_json.phraseOverrides || {},
             customLessons: latestData.data_json.customLessons || [],
             customSongs: latestData.data_json.customSongs || [],
+            chatSessions: latestData.data_json.chatSessions || {},
             deletedPhraseIds: latestData.data_json.deletedPhraseIds || [],
             guestProgress: latestData.data_json.guestProgress || {},
             updated_at: latestData.updated_at || new Date().toISOString()

@@ -418,6 +418,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cloudData.customSongs) {
         await userStorage.saveSongs(cloudData.customSongs);
       }
+      if (cloudData.chatSessions) {
+        Object.entries(cloudData.chatSessions).forEach(([lang, sess]) => {
+          if (Array.isArray(sess) && sess.length > 0) {
+            localStorage.setItem(`hl_chat_sessions_${lang}`, JSON.stringify(sess));
+            userStorage.saveChatSessions(lang, sess);
+          }
+        });
+      }
       if (cloudData.deletedPhraseIds) {
         localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
       }
@@ -464,6 +472,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (cloudData.customSongs && cloudData.customSongs.length > 0) {
           await userStorage.saveSongs(cloudData.customSongs);
+        }
+        if (cloudData.chatSessions) {
+          Object.entries(cloudData.chatSessions).forEach(([lang, sess]) => {
+            if (Array.isArray(sess) && sess.length > 0) {
+              localStorage.setItem(`hl_chat_sessions_${lang}`, JSON.stringify(sess));
+              userStorage.saveChatSessions(lang, sess);
+            }
+          });
         }
         if (cloudData.deletedPhraseIds && cloudData.deletedPhraseIds.length > 0) {
           localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));

@@ -227,6 +227,40 @@ export const userStorage = {
   },
 
   /**
+   * Save AI chat sessions to BOTH localStorage and IndexedDB
+   */
+  async saveChatSessions(lang: string, sessions: any[]): Promise<void> {
+    try {
+      localStorage.setItem(`hl_chat_sessions_${lang}`, JSON.stringify(sessions));
+    } catch (e) {
+      console.warn('[userStorage] localStorage quota error:', e);
+    }
+    await idbSet(`hl_chat_sessions_${lang}`, sessions);
+  },
+
+  /**
+   * Get AI chat sessions from localStorage or restore from IndexedDB
+   */
+  async getChatSessions(lang: string): Promise<any[]> {
+    try {
+      const stored = localStorage.getItem(`hl_chat_sessions_${lang}`);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+
+    try {
+      const idbChat = await idbGet<any[]>(`hl_chat_sessions_${lang}`);
+      if (idbChat && Array.isArray(idbChat) && idbChat.length > 0) {
+        try {
+          localStorage.setItem(`hl_chat_sessions_${lang}`, JSON.stringify(idbChat));
+        } catch {}
+        return idbChat;
+      }
+    } catch {}
+
+    return [];
+  },
+
+  /**
    * Export all user data as a JSON file downloadable by the user
    */
   async exportBackup(): Promise<string> {
