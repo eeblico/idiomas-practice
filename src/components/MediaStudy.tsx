@@ -1601,6 +1601,47 @@ export const MediaStudy: React.FC = () => {
     setClozeChecked(true);
   };
 
+  const handleCheckSentenceCloze = (subId: number) => {
+    setClozeChecked(true);
+    handleCheckCloze();
+  };
+
+  const handleHintSentenceCloze = (subId: number) => {
+    if (!activeLesson) return;
+    const sub = activeLesson.subtitles.find(s => s.id === subId);
+    if (!sub) return;
+    const { dialogue } = parseSpeakerAndText(sub.text);
+    const words = dialogue.split(/\s+/);
+    const updated = { ...clozeUserAnswers };
+    words.forEach((w, wIdx) => {
+      const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+      if (cleanW.length > 3) {
+        const key = `${sub.id}-${wIdx}`;
+        if (!updated[key] || updated[key].length === 0) {
+          updated[key] = cleanW.charAt(0);
+        }
+      }
+    });
+    setClozeUserAnswers(updated);
+  };
+
+  const handleRevealSentenceCloze = (subId: number) => {
+    if (!activeLesson) return;
+    const sub = activeLesson.subtitles.find(s => s.id === subId);
+    if (!sub) return;
+    const { dialogue } = parseSpeakerAndText(sub.text);
+    const words = dialogue.split(/\s+/);
+    const updated = { ...clozeUserAnswers };
+    words.forEach((w, wIdx) => {
+      const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+      if (cleanW.length > 3) {
+        const key = `${sub.id}-${wIdx}`;
+        updated[key] = cleanW;
+      }
+    });
+    setClozeUserAnswers(updated);
+  };
+
   const handleOpenEditTranscriptModal = () => {
     if (!activeLesson) return;
     const fullText = activeLesson.subtitles.map(s => s.text).join('\n');
@@ -3031,7 +3072,26 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
               {/* Subtitles Container: Dialogue Continuous View OR Individual Cards View */}
               {shadowingViewMode === 'dialogue' ? (
                 <div className="glass-card" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(15, 17, 26, 0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  {/* Mode Header Banner */}
+                  
+                  {/* CineTeach Aesthetic Top Banner */}
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '4px' }}>
+                    <div style={{
+                      background: 'rgba(0,0,0,0.7)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '30px',
+                      padding: '6px 24px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 15px rgba(0,0,0,0.4)'
+                    }}>
+                      <span style={{ color: '#f3f4f6', fontSize: '0.88rem', fontWeight: 650, letterSpacing: '0.01em' }}>
+                        {shadowingGameMode === 'cloze' ? 'Play the scene as the students fill in the gaps' : (shadowingGameMode === 'reorder' ? 'Reconstruct the scene dialogue word by word' : 'Follow the dialogue and shadow native pronunciation')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mode Header Controls Banner */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent)' }}>
@@ -3039,7 +3099,7 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                       </span>
                     </div>
                     {shadowingGameMode === 'cloze' && (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                         {clozeScore && (
                           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: clozeScore.correct === clozeScore.total ? '#22c55e' : '#f59e0b' }}>
                             Acertos: {clozeScore.correct} / {clozeScore.total}
@@ -3050,7 +3110,7 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                           className="btn btn-primary"
                           style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
                         >
-                          Verificar Respostas
+                          Verificar Todas
                         </button>
                         <button 
                           onClick={handleRevealCloze}
@@ -3063,8 +3123,8 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                     )}
                   </div>
 
-                  {/* Sentences Script List */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Sentences Script List (Compact, Continuous Dialogue) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     {adjustedSubtitles.map((sub) => {
                       const isActive = lastActiveSubtitle?.id === sub.id;
                       const { speaker, dialogue } = parseSpeakerAndText(sub.text);
@@ -3075,14 +3135,14 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                         <div 
                           key={sub.id}
                           style={{
-                            padding: '12px 14px',
+                            padding: '14px 16px',
                             borderRadius: '8px',
                             background: isActive ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.02)',
                             border: isActive ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.05)',
                             transition: 'all 0.2s ease',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '6px'
+                            gap: '8px'
                           }}
                         >
                           {/* Top row: Speaker & Quick Actions */}
@@ -3090,19 +3150,17 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {speaker ? (
                                 <span style={{
-                                  fontSize: '0.8rem',
-                                  fontWeight: 800,
+                                  fontSize: '0.95rem',
+                                  fontWeight: 850,
                                   color: speakerColor,
-                                  background: `${speakerColor}20`,
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  border: `1px solid ${speakerColor}50`
+                                  textShadow: '0 0 10px rgba(0,0,0,0.5)',
+                                  letterSpacing: '0.01em'
                                 }}>
-                                  {speaker}
+                                  {speaker}:
                                 </span>
                               ) : (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  Frase #{sub.id}
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                                  Frase #{sub.id}:
                                 </span>
                               )}
                               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
@@ -3137,41 +3195,100 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
 
                           {/* Content: Depending on game mode */}
                           {shadowingGameMode === 'cloze' ? (
-                            <div style={{ fontSize: '1rem', lineHeight: 1.6, color: 'white', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                              {words.map((w, wIdx) => {
-                                const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
-                                const isGap = cleanW.length > 3;
-                                const key = `${sub.id}-${wIdx}`;
-                                const userVal = clozeUserAnswers[key] || '';
-                                const isCorrect = userVal.trim().toLowerCase() === cleanW;
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <div style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'white', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'baseline' }}>
+                                {words.map((w, wIdx) => {
+                                  const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+                                  const isGap = cleanW.length > 3;
+                                  const key = `${sub.id}-${wIdx}`;
+                                  const userVal = clozeUserAnswers[key] || '';
+                                  const isCorrect = userVal.trim().toLowerCase() === cleanW;
 
-                                if (!isGap) {
-                                  return <span key={wIdx}>{w}</span>;
-                                }
+                                  if (!isGap) {
+                                    return <span key={wIdx} style={{ fontSize: '1.05rem', color: '#e5e7eb' }}>{w}</span>;
+                                  }
 
-                                return (
-                                  <span key={wIdx} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                    <input
-                                      type="text"
-                                      value={userVal}
-                                      placeholder="____"
-                                      onChange={(e) => setClozeUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
-                                      style={{
-                                        width: `${Math.max(cleanW.length * 10, 48)}px`,
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        fontSize: '0.9rem',
-                                        textAlign: 'center',
-                                        fontWeight: 700,
-                                        outline: 'none',
-                                        border: clozeChecked ? (isCorrect ? '2px solid #22c55e' : '2px solid #ef4444') : '1px solid rgba(255,255,255,0.2)',
-                                        background: clozeChecked ? (isCorrect ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)') : 'rgba(0,0,0,0.3)',
-                                        color: clozeChecked ? (isCorrect ? '#4ade80' : '#f87171') : 'white'
-                                      }}
-                                    />
-                                  </span>
-                                );
-                              })}
+                                  return (
+                                    <span key={wIdx} style={{ display: 'inline-flex', alignItems: 'baseline' }}>
+                                      <input
+                                        type="text"
+                                        value={userVal}
+                                        placeholder="______"
+                                        onChange={(e) => setClozeUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                                        style={{
+                                          width: `${Math.max(cleanW.length * 11, 55)}px`,
+                                          padding: '2px 4px',
+                                          fontSize: '1.05rem',
+                                          textAlign: 'center',
+                                          fontWeight: 700,
+                                          outline: 'none',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          borderBottom: clozeChecked 
+                                            ? (isCorrect ? '2px solid #22c55e' : '2px solid #ef4444') 
+                                            : '2px solid rgba(255,255,255,0.7)',
+                                          color: clozeChecked 
+                                            ? (isCorrect ? '#4ade80' : '#f87171') 
+                                            : 'white',
+                                          transition: 'all 0.2s'
+                                        }}
+                                      />
+                                    </span>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Per-Sentence Verification & Hint Controls */}
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
+                                <button
+                                  onClick={() => handleCheckSentenceCloze(sub.id)}
+                                  style={{
+                                    background: 'rgba(34, 197, 94, 0.15)',
+                                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                                    color: '#4ade80',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Verificar esta sentença"
+                                >
+                                  ✓ Verificar Frase
+                                </button>
+                                <button
+                                  onClick={() => handleHintSentenceCloze(sub.id)}
+                                  style={{
+                                    background: 'rgba(234, 179, 8, 0.15)',
+                                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                                    color: '#facc15',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Revelar 1ª letra como dica"
+                                >
+                                  💡 Dica
+                                </button>
+                                <button
+                                  onClick={() => handleRevealSentenceCloze(sub.id)}
+                                  style={{
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    color: 'var(--text-secondary)',
+                                    borderRadius: '4px',
+                                    padding: '3px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Revelar resposta desta frase"
+                                >
+                                  👁️ Revelar
+                                </button>
+                              </div>
                             </div>
                           ) : shadowingGameMode === 'reorder' ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
