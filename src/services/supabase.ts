@@ -71,35 +71,54 @@ export async function checkSupabaseHealth(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-    const res = await fetch(`${url}/rest/v1/`, {
+    // 1. First probe standard Supabase Auth Health endpoint
+    const authRes = await fetch(`${url}/auth/v1/health`, {
+      method: 'GET',
+      headers: {
+        apikey: key
+      },
+      signal: controller.signal
+    }).catch(() => null);
+
+    // 2. Probe REST database table endpoint
+    const restRes = await fetch(`${url}/rest/v1/user_sync_data?select=sync_code&limit=1`, {
       method: 'GET',
       headers: {
         apikey: key,
         Authorization: `Bearer ${key}`
       },
       signal: controller.signal
-    });
+    }).catch(() => null);
+
     clearTimeout(timeoutId);
 
-    if (res.ok || res.status === 200 || res.status === 404) {
+    if ((authRes && (authRes.ok || authRes.status === 200)) || (restRes && (restRes.ok || restRes.status === 200 || restRes.status === 206))) {
       return {
         ok: true,
         status: 'connected',
         message: 'Conectado ao Supabase com sucesso!',
         projectRef
       };
-    } else if (res.status === 401 || res.status === 403) {
+    } else if (restRes && (restRes.status === 401 || restRes.status === 403)) {
       return {
         ok: false,
         status: 'invalid_key',
         message: 'URL encontrada, porém a Chave Anon é inválida ou expirou.',
         projectRef
       };
+    } else if (authRes || restRes) {
+      const status = (authRes || restRes)?.status;
+      return {
+        ok: true,
+        status: 'connected',
+        message: 'Conectado ao Supabase!',
+        projectRef
+      };
     } else {
       return {
         ok: false,
         status: 'offline',
-        message: `Servidor retornou status ${res.status}.`,
+        message: `Servidor não respondeu.`,
         projectRef
       };
     }

@@ -377,9 +377,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const forceSyncCloud = async () => {
     setCloudSyncStatus('syncing');
+    const songs = await userStorage.getSongs();
+    const lessons = await userStorage.getLessons();
     const ok = await cloudSyncService.pushToCloud({
       customPhrases,
       customCategories,
+      customSongs: songs,
+      customLessons: lessons,
       guestProgress
     });
     setCloudSyncStatus(ok ? 'synced' : 'offline');
@@ -394,10 +398,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cloudData.customPhrases) {
         setCustomPhrases(cloudData.customPhrases);
         localStorage.setItem('hl_custom_phrases', JSON.stringify(cloudData.customPhrases));
+        await userStorage.savePhrases(cloudData.customPhrases);
       }
       if (cloudData.customCategories) {
         setCustomCategories(cloudData.customCategories);
         localStorage.setItem('hl_custom_categories', JSON.stringify(cloudData.customCategories));
+        await userStorage.saveCategories(cloudData.customCategories);
       }
       if (cloudData.categoryOverrides) {
         localStorage.setItem('hl_category_overrides', JSON.stringify(cloudData.categoryOverrides));
@@ -407,9 +413,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (cloudData.customLessons) {
         localStorage.setItem('hl_custom_lessons', JSON.stringify(cloudData.customLessons));
+        await userStorage.saveLessons(cloudData.customLessons);
       }
       if (cloudData.customSongs) {
-        userStorage.saveSongs(cloudData.customSongs);
+        await userStorage.saveSongs(cloudData.customSongs);
       }
       if (cloudData.deletedPhraseIds) {
         localStorage.setItem('hl_deleted_phrases', JSON.stringify(cloudData.deletedPhraseIds));
@@ -432,6 +439,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCloudSyncStatus('syncing');
       const cloudData = await cloudSyncService.pullFromCloud();
       if (cloudData) {
+        if (cloudData.sync_code) {
+          setCloudSyncCode(cloudData.sync_code);
+        }
         if (cloudData.customPhrases && cloudData.customPhrases.length > 0) {
           setCustomPhrases(cloudData.customPhrases);
           localStorage.setItem('hl_custom_phrases', JSON.stringify(cloudData.customPhrases));
@@ -466,9 +476,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshCatalog();
       } else {
         // Push initial local state to cloud if empty
-        cloudSyncService.pushToCloud({
+        const songs = await userStorage.getSongs();
+        const lessons = await userStorage.getLessons();
+        await cloudSyncService.pushToCloud({
           customPhrases,
           customCategories,
+          customSongs: songs,
+          customLessons: lessons,
           guestProgress
         });
         setCloudSyncStatus('synced');
