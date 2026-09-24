@@ -2248,287 +2248,175 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
           </div>
         </div>
       ) : (
-        // --- Interactive Media Player Study View ---
-        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
+        // --- Interactive Media Player Study View (Authentic CineTeach Layout) ---
+        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
           
-          {/* Header Row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* CineTeach Top Navigation Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', padding: '0 8px' }}>
+            {/* Left: Brand & Part Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.8)', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.2)' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 900, letterSpacing: '0.05em', color: '#ffffff' }}>🎬 CINETEACH</span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '4px 14px', fontSize: '0.85rem', color: '#ffffff', fontWeight: 700 }}>
+                Part 1
+              </div>
+            </div>
+
+            {/* Center: Instruction Banner */}
+            <div style={{
+              background: 'rgba(0,0,0,0.7)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '25px',
+              padding: '6px 24px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
+            }}>
+              <span style={{ color: '#f3f4f6', fontSize: '0.92rem', fontWeight: 650 }}>
+                Play the scene as the students fill in the gaps
+              </span>
+            </div>
+
+            {/* Right: Go Back Button */}
             <button 
               onClick={() => {
                 stopRecordingSpeech();
                 setActiveLesson(null);
               }} 
-              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+              style={{
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                color: '#ffffff',
+                borderRadius: '20px',
+                padding: '6px 20px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(30, 41, 59, 0.95)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(15, 23, 42, 0.85)'}
             >
-              <ArrowLeft size={18} />
-              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Voltar aos Materiais</span>
+              Go back
             </button>
-
-            <h4 style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontWeight: 800 }}>
-              {activeLesson.title}
-            </h4>
           </div>
 
-          {/* Main Content Grid: [Left: Player & Subtitles] [Right: Dictionary / IA Panel] */}
-          <div className="media-study-layout">
+          {/* Main Stage: Compact Video Player Centered & Continuous Dialogue Script */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
             
-            {/* Left Column: Player & Scrolling Transcripts */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'hidden', height: '100%' }}>
-              
-              {/* Media Player Card */}
-              <div className="glass-card" style={isTheaterFullscreen ? {
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 1000,
-                backgroundColor: 'black',
-                borderRadius: 0,
-                border: 'none',
-                display: 'flex',
-                flexDirection: 'column',
-                padding: 0,
-                margin: 0,
-                overflow: 'hidden'
-              } : {
-                padding: '0', 
-                overflow: 'hidden', 
-                border: '1px solid var(--border)', 
-                position: 'relative'
-              }}>
-                {/* Exit Fullscreen Button */}
-                {isTheaterFullscreen && (
-                  <button 
-                    onClick={() => setIsTheaterFullscreen(false)}
-                    style={{
-                      position: 'absolute', top: '20px', left: '20px', zIndex: 1010,
-                      background: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
-                      width: '40px', height: '40px', borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    title="Sair do modo tela cheia"
-                  >
-                    <ArrowLeft size={20} />
-                  </button>
-                )}
-
-                {/* Cinema Mode Button (Expand/Shrink Height inside page) */}
-                {!isTheaterFullscreen && (
-                  <button 
-                    onClick={() => setIsCinemaMode(prev => !prev)}
-                    style={{
-                      position: 'absolute', top: '12px', right: '50px', zIndex: 10,
-                      background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '32px', height: '32px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white',
-                      transition: 'all 0.2s ease'
-                    }}
-                    title={isCinemaMode ? 'Contrair altura' : 'Expandir altura'}
-                  >
-                    {isCinemaMode ? <Shrink size={16} /> : <Expand size={16} />}
-                  </button>
-                )}
-
-                {/* Fullscreen Mode Button (Full Viewport Overlay) */}
-                <button 
-                  onClick={() => setIsTheaterFullscreen(prev => !prev)}
-                  style={{
-                    position: 'absolute', top: '12px', right: '12px', zIndex: 10,
-                    background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '32px', height: '32px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white',
-                    transition: 'all 0.2s ease'
-                  }}
-                  title={isTheaterFullscreen ? 'Sair da tela cheia' : 'Modo tela cheia'}
+            {/* Compact Video Player Card Centered */}
+            <div style={{
+              maxWidth: '480px',
+              width: '100%',
+              margin: '0 auto',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              boxShadow: '0 12px 35px rgba(0,0,0,0.85)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              position: 'relative',
+              background: '#000000'
+            }}>
+              {activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be') ? (
+                // YouTube embedded player
+                <div id="youtube-player-container" style={{ width: '100%', height: '220px', background: 'black' }}>
+                  <div id="youtube-player-iframe"></div>
+                </div>
+              ) : isGoogleDriveUrl(activeLesson.videoUrl) ? (
+                // Google Drive video embedded player
+                <div style={{ width: '100%', height: '220px', background: 'black' }}>
+                  <iframe
+                    src={getGoogleDriveEmbedUrl(activeLesson.videoUrl)}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    allow="autoplay; encrypted-media"
+                    allowFullScreen
+                    title="Google Drive Video"
+                  />
+                </div>
+              ) : (
+                // HTML5 video element player
+                <div 
+                  onMouseEnter={() => setIsPlayerHovered(true)}
+                  onMouseLeave={() => setIsPlayerHovered(false)}
+                  style={{ position: 'relative', width: '100%', height: '220px', overflow: 'hidden' }}
                 >
-                  {isTheaterFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-                </button>
-
-                {activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be') ? (
-                  // YouTube embedded player target element
-                  <div id="youtube-player-container" style={{ width: '100%', height: isTheaterFullscreen ? '0' : (isCinemaMode ? '380px' : '240px'), flex: isTheaterFullscreen ? 1 : 'none', background: 'black', transition: 'height 0.3s ease' }}>
-                    <div id="youtube-player-iframe"></div>
-                  </div>
-                ) : isGoogleDriveUrl(activeLesson.videoUrl) ? (
-                  // Google Drive video embedded player
-                  <div style={{ width: '100%', height: isTheaterFullscreen ? '0' : (isCinemaMode ? '380px' : '280px'), flex: isTheaterFullscreen ? 1 : 'none', background: 'black', transition: 'height 0.3s ease' }}>
-                    <iframe
-                      src={getGoogleDriveEmbedUrl(activeLesson.videoUrl)}
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                      allow="autoplay; encrypted-media"
-                      allowFullScreen
-                      title="Google Drive Video"
-                    />
-                  </div>
-                ) : (
-                  // HTML5 video element player with play/pause click overlay
+                  <video 
+                    ref={videoPlayerRef}
+                    src={activeLesson.videoUrl}
+                    style={{ width: '100%', height: '100%', display: 'block', backgroundColor: 'black', objectFit: 'contain' }}
+                    onTimeUpdate={(e) => handleTimeUpdate((e.target as HTMLVideoElement).currentTime)}
+                    onDurationChange={(e) => setDuration((e.target as HTMLVideoElement).duration)}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                  
+                  {/* Play/Pause Overlay Button */}
                   <div 
-                    onMouseEnter={() => setIsPlayerHovered(true)}
-                    onMouseLeave={() => setIsPlayerHovered(false)}
-                    style={{ 
-                      position: 'relative', 
-                      width: '100%', 
-                      height: isTheaterFullscreen ? '0' : (isCinemaMode ? '380px' : '240px'), 
-                      flex: isTheaterFullscreen ? 1 : 'none', 
-                      overflow: 'hidden' 
+                    onClick={togglePlay}
+                    style={{
+                      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      background: 'rgba(0,0,0,0.15)', zIndex: 5
                     }}
                   >
-                    <video 
-                      ref={videoPlayerRef}
-                      src={activeLesson.videoUrl}
-                      style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        display: 'block', 
-                        backgroundColor: 'black', 
-                        objectFit: 'contain', 
-                        transition: 'all 0.3s ease' 
-                      }}
-                      onTimeUpdate={(e) => handleTimeUpdate((e.target as HTMLVideoElement).currentTime)}
-                      onDurationChange={(e) => setDuration((e.target as HTMLVideoElement).duration)}
-                      onPlay={(e) => {
-                        setIsPlaying(true);
-                        (e.target as HTMLVideoElement).playbackRate = playbackSpeed;
-                      }}
-                      onPause={() => setIsPlaying(false)}
-                    />
-                    
-                    {/* Play/Pause Overlay Button */}
                     <div 
-                      onClick={togglePlay}
                       style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
+                        background: 'rgba(12, 13, 21, 0.85)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '50%',
+                        width: '48px',
+                        height: '48px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'pointer',
-                        background: 'rgba(0,0,0,0.1)',
-                        zIndex: 5
-                      }}
-                    >
-                      <div 
-                        style={{
-                          background: 'rgba(12, 13, 21, 0.85)',
-                          border: '1px solid rgba(255, 255, 255, 0.15)',
-                          borderRadius: '50%',
-                          width: '56px',
-                          height: '56px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-                          opacity: !isPlaying || isPlayerHovered ? 1 : 0,
-                          transition: 'opacity 0.2s ease, transform 0.2s ease',
-                          transform: !isPlaying || isPlayerHovered ? 'scale(1)' : 'scale(0.8)'
-                        }}
-                      >
-                        {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" style={{ marginLeft: '3px' }} />}
-                      </div>
-                    </div>
-
-                    {/* Custom Bottom Controls Bar */}
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        background: 'linear-gradient(to top, rgba(12, 13, 21, 0.95) 0%, rgba(12, 13, 21, 0.4) 70%, rgba(12, 13, 21, 0) 100%)',
-                        padding: '12px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        zIndex: 10,
+                        color: 'white',
+                        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.6)',
                         opacity: !isPlaying || isPlayerHovered ? 1 : 0,
                         transition: 'opacity 0.2s ease, transform 0.2s ease',
-                        transform: !isPlaying || isPlayerHovered ? 'translateY(0)' : 'translateY(10px)',
-                        pointerEvents: !isPlaying || isPlayerHovered ? 'auto' : 'none'
+                        transform: !isPlaying || isPlayerHovered ? 'scale(1)' : 'scale(0.8)'
                       }}
-                      onClick={(e) => e.stopPropagation()}
                     >
-                      {/* Play/Pause Button */}
-                      <button
-                        onClick={togglePlay}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          border: '1px solid rgba(255, 255, 255, 0.2)',
-                          borderRadius: '50%',
-                          width: '32px',
-                          height: '32px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: 'white',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                        title={isPlaying ? 'Pausar' : 'Reproduzir'}
-                      >
-                        {isPlaying ? <Pause size={14} fill="white" /> : <Play size={14} fill="white" style={{ marginLeft: '1px' }} />}
-                      </button>
-
-                      {/* Current Time / Duration */}
-                      <span style={{ fontSize: '0.75rem', color: 'white', fontFamily: 'monospace', minWidth: '85px', userSelect: 'none' }}>
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                      </span>
-
-                      {/* Timeline Slider */}
-                      <input 
-                        type="range"
-                        min={0}
-                        max={duration || 100}
-                        step={0.1}
-                        value={currentTime}
-                        onChange={(e) => seekTo(parseFloat(e.target.value))}
-                        style={{
-                          flex: 1,
-                          accentColor: '#10b981',
-                          height: '4px',
-                          cursor: 'pointer',
-                          borderRadius: '2px',
-                          background: 'rgba(255, 255, 255, 0.3)',
-                          outline: 'none'
-                        }}
-                      />
-
-                      {/* Speed Adjuster */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '2px 8px', border: '1px solid rgba(255, 255, 255, 0.15)' }}>
-                        <button 
-                          onClick={() => {
-                            const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-                            const curIdx = speeds.indexOf(playbackSpeed);
-                            if (curIdx > 0) changeSpeed(speeds[curIdx - 1]);
-                          }}
-                          style={{ background: 'none', border: 'none', color: 'white', padding: '0 4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.7rem' }}
-                          title="Diminuir velocidade"
-                        >
-                          -
-                        </button>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'white', minWidth: '24px', textAlign: 'center' }}>
-                          {playbackSpeed}x
-                        </span>
-                        <button 
-                          onClick={() => {
-                            const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-                            const curIdx = speeds.indexOf(playbackSpeed);
-                            if (curIdx !== -1 && curIdx < speeds.length - 1) changeSpeed(speeds[curIdx + 1]);
-                          }}
-                          style={{ background: 'none', border: 'none', color: 'white', padding: '0 4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.7rem' }}
-                          title="Aumentar velocidade"
-                        >
-                          +
-                        </button>
-                      </div>
+                      {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" style={{ marginLeft: '2px' }} />}
                     </div>
                   </div>
-                )}
+
+                  {/* Custom Bottom Timeline Bar */}
+                  <div 
+                    style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      background: 'linear-gradient(to top, rgba(12, 13, 21, 0.95) 0%, rgba(12, 13, 21, 0.3) 100%)',
+                      padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10,
+                      opacity: !isPlaying || isPlayerHovered ? 1 : 0, transition: 'opacity 0.2s ease'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={togglePlay}
+                      style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '2px' }}
+                    >
+                      {isPlaying ? <Pause size={14} fill="white" /> : <Play size={14} fill="white" />}
+                    </button>
+
+                    <span style={{ fontSize: '0.7rem', color: 'white', fontFamily: 'monospace' }}>
+                      {formatTime(currentTime)} / {formatTime(duration)}
+                    </span>
+
+                    <input 
+                      type="range"
+                      min={0}
+                      max={duration || 100}
+                      step={0.1}
+                      value={currentTime}
+                      onChange={(e) => seekTo(parseFloat(e.target.value))}
+                      style={{ flex: 1, accentColor: '#10b981', height: '3px', cursor: 'pointer' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
                 {/* Large Active Subtitle Banner */}
                 {lastActiveSubtitle && (
@@ -2807,7 +2695,6 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                     </div>
                   </div>
                 )}
-              </div>
 
               {/* Subtitles Toolbar Toggles - Row 1 & Shadowing Controls */}
               <div style={{ display: 'flex', gap: '8px', padding: '0 4px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -3069,348 +2956,196 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
                 </div>
               </div>
 
-              {/* Subtitles Container: Dialogue Continuous View OR Individual Cards View */}
+              {/* Subtitles Container: Authentic CineTeach Dialogue View OR Cards View */}
               {shadowingViewMode === 'dialogue' ? (
-                <div className="glass-card" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(15, 17, 26, 0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  padding: '24px 32px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: 'radial-gradient(circle at center top, rgba(26, 32, 48, 0.95) 0%, rgba(10, 12, 20, 0.98) 100%)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '16px',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.8)'
+                }}>
                   
-                  {/* CineTeach Aesthetic Top Banner */}
-                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '4px' }}>
-                    <div style={{
-                      background: 'rgba(0,0,0,0.7)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      borderRadius: '30px',
-                      padding: '6px 24px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      boxShadow: '0 4px 15px rgba(0,0,0,0.4)'
-                    }}>
-                      <span style={{ color: '#f3f4f6', fontSize: '0.88rem', fontWeight: 650, letterSpacing: '0.01em' }}>
-                        {shadowingGameMode === 'cloze' ? 'Play the scene as the students fill in the gaps' : (shadowingGameMode === 'reorder' ? 'Reconstruct the scene dialogue word by word' : 'Follow the dialogue and shadow native pronunciation')}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Mode Header Controls Banner */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent)' }}>
-                        {shadowingGameMode === 'cloze' ? '🎮 Jogo de Lacunas (Cloze Recall)' : (shadowingGameMode === 'reorder' ? '🧩 Jogo de Reordenar Palavras' : '💬 Roteiro de Diálogo Contínuo (CineTeach)')}
-                      </span>
-                    </div>
-                    {shadowingGameMode === 'cloze' && (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {clozeScore && (
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: clozeScore.correct === clozeScore.total ? '#22c55e' : '#f59e0b' }}>
-                            Acertos: {clozeScore.correct} / {clozeScore.total}
-                          </span>
-                        )}
-                        <button 
-                          onClick={handleCheckCloze}
-                          className="btn btn-primary"
-                          style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
-                        >
-                          Verificar Todas
-                        </button>
-                        <button 
-                          onClick={handleRevealCloze}
-                          className="btn btn-secondary"
-                          style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px' }}
-                        >
-                          Revelar Todas
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sentences Script List (Compact, Continuous Dialogue) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Sentences Script List (Compact, Continuous Dialogue matching CineTeach) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '880px', width: '100%', margin: '0 auto' }}>
                     {adjustedSubtitles.map((sub) => {
                       const isActive = lastActiveSubtitle?.id === sub.id;
                       const { speaker, dialogue } = parseSpeakerAndText(sub.text);
-                      const speakerColor = speaker ? getSpeakerColor(speaker) : '#06b6d4';
+                      const speakerColor = speaker ? getSpeakerColor(speaker) : '#facc15';
                       const words = dialogue.split(/\s+/);
 
                       return (
                         <div 
                           key={sub.id}
                           style={{
-                            padding: '14px 16px',
-                            borderRadius: '8px',
-                            background: isActive ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.02)',
-                            border: isActive ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.05)',
-                            transition: 'all 0.2s ease',
                             display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
+                            alignItems: 'baseline',
+                            flexWrap: 'wrap',
+                            rowGap: '6px',
+                            columnGap: '8px',
+                            fontSize: '1.25rem',
+                            lineHeight: 1.8,
+                            color: '#ffffff',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            background: isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                            transition: 'background 0.2s ease'
                           }}
                         >
-                          {/* Top row: Speaker & Quick Actions */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {speaker ? (
-                                <span style={{
-                                  fontSize: '0.95rem',
-                                  fontWeight: 850,
-                                  color: speakerColor,
-                                  textShadow: '0 0 10px rgba(0,0,0,0.5)',
-                                  letterSpacing: '0.01em'
-                                }}>
-                                  {speaker}:
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                                  Frase #{sub.id}:
-                                </span>
-                              )}
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                                {formatTime(sub.start)}
-                              </span>
-                            </div>
+                          {/* Character Name Tag */}
+                          <span 
+                            onClick={() => seekTo(sub.start + 0.1)}
+                            style={{
+                              color: speakerColor,
+                              fontWeight: 850,
+                              minWidth: '135px',
+                              display: 'inline-block',
+                              letterSpacing: '0.01em',
+                              cursor: 'pointer',
+                              textShadow: '0 0 12px rgba(0,0,0,0.6)'
+                            }}
+                            title="Clique para ouvir esta fala"
+                          >
+                            {speaker ? `${speaker}:` : `Frase #${sub.id}:`}
+                          </span>
 
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                              <button
-                                onClick={() => seekTo(sub.start + 0.1)}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
-                                title="Ouvir esta frase"
-                              >
-                                <Play size={13} />
-                              </button>
-                              <button
-                                onClick={() => speakWord(dialogue)}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
-                                title="Pronúncia da IA"
-                              >
-                                <Volume2 size={13} />
-                              </button>
-                              <button
-                                onClick={() => handleAddAsCustomPhrase(sub)}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '3px' }}
-                                title="Salvar na Ilha de Vocabulário"
-                              >
-                                <Plus size={13} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Content: Depending on game mode */}
+                          {/* Dialogue Text & Cloze Gaps */}
                           {shadowingGameMode === 'cloze' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <div style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'white', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'baseline' }}>
-                                {words.map((w, wIdx) => {
-                                  const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
-                                  const isGap = cleanW.length > 3;
-                                  const key = `${sub.id}-${wIdx}`;
-                                  const userVal = clozeUserAnswers[key] || '';
-                                  const isCorrect = userVal.trim().toLowerCase() === cleanW;
+                            <span style={{ display: 'inline', flex: 1 }}>
+                              {words.map((w, wIdx) => {
+                                const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
+                                const isGap = cleanW.length > 3;
+                                const key = `${sub.id}-${wIdx}`;
+                                const userVal = clozeUserAnswers[key] || '';
+                                const isCorrect = userVal.trim().toLowerCase() === cleanW;
 
-                                  if (!isGap) {
-                                    return <span key={wIdx} style={{ fontSize: '1.05rem', color: '#e5e7eb' }}>{w}</span>;
-                                  }
-
+                                if (!isGap) {
                                   return (
-                                    <span key={wIdx} style={{ display: 'inline-flex', alignItems: 'baseline' }}>
-                                      <input
-                                        type="text"
-                                        value={userVal}
-                                        placeholder="______"
-                                        onChange={(e) => setClozeUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
-                                        style={{
-                                          width: `${Math.max(cleanW.length * 11, 55)}px`,
-                                          padding: '2px 4px',
-                                          fontSize: '1.05rem',
-                                          textAlign: 'center',
-                                          fontWeight: 700,
-                                          outline: 'none',
-                                          background: 'transparent',
-                                          border: 'none',
-                                          borderBottom: clozeChecked 
-                                            ? (isCorrect ? '2px solid #22c55e' : '2px solid #ef4444') 
-                                            : '2px solid rgba(255,255,255,0.7)',
-                                          color: clozeChecked 
-                                            ? (isCorrect ? '#4ade80' : '#f87171') 
-                                            : 'white',
-                                          transition: 'all 0.2s'
-                                        }}
-                                      />
+                                    <span key={wIdx} style={{ marginRight: '6px', color: '#f3f4f6' }}>
+                                      {w}
                                     </span>
                                   );
-                                })}
-                              </div>
+                                }
 
-                              {/* Per-Sentence Verification & Hint Controls */}
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
-                                <button
-                                  onClick={() => handleCheckSentenceCloze(sub.id)}
-                                  style={{
-                                    background: 'rgba(34, 197, 94, 0.15)',
-                                    border: '1px solid rgba(34, 197, 94, 0.3)',
-                                    color: '#4ade80',
-                                    borderRadius: '4px',
-                                    padding: '3px 8px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Verificar esta sentença"
-                                >
-                                  ✓ Verificar Frase
-                                </button>
-                                <button
-                                  onClick={() => handleHintSentenceCloze(sub.id)}
-                                  style={{
-                                    background: 'rgba(234, 179, 8, 0.15)',
-                                    border: '1px solid rgba(234, 179, 8, 0.3)',
-                                    color: '#facc15',
-                                    borderRadius: '4px',
-                                    padding: '3px 8px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Revelar 1ª letra como dica"
-                                >
-                                  💡 Dica
-                                </button>
-                                <button
-                                  onClick={() => handleRevealSentenceCloze(sub.id)}
-                                  style={{
-                                    background: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                                    color: 'var(--text-secondary)',
-                                    borderRadius: '4px',
-                                    padding: '3px 8px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 600,
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Revelar resposta desta frase"
-                                >
-                                  👁️ Revelar
-                                </button>
-                              </div>
-                            </div>
-                          ) : shadowingGameMode === 'reorder' ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {reorderSubId === sub.id ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                  {/* Target sentence construction line */}
-                                  <div style={{ minHeight: '36px', padding: '6px 10px', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', border: '1px dashed rgba(255,255,255,0.2)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                                    {reorderSelectedWords.length === 0 ? (
-                                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Clique nas palavras abaixo na ordem correta...</span>
-                                    ) : (
-                                      reorderSelectedWords.map((word, wIdx) => (
-                                        <span
-                                          key={wIdx}
-                                          onClick={() => {
-                                            const next = [...reorderSelectedWords];
-                                            next.splice(wIdx, 1);
-                                            setReorderSelectedWords(next);
-                                          }}
-                                          style={{ padding: '3px 8px', background: 'var(--accent)', color: 'black', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                                          title="Clique para remover"
-                                        >
-                                          {word}
-                                        </span>
-                                      ))
-                                    )}
-                                  </div>
-
-                                  {/* Scrambled word bank */}
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {words.map((w, wIdx) => {
-                                      const isUsed = reorderSelectedWords.filter(x => x === w).length >= words.filter(x => x === w).length;
-                                      return (
-                                        <button
-                                          key={wIdx}
-                                          disabled={isUsed}
-                                          onClick={() => {
-                                            const next = [...reorderSelectedWords, w];
-                                            setReorderSelectedWords(next);
-                                            if (next.join(' ').toLowerCase() === dialogue.toLowerCase()) {
-                                              setReorderSuccess(true);
-                                            }
-                                          }}
-                                          style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 600,
-                                            cursor: isUsed ? 'not-allowed' : 'pointer',
-                                            opacity: isUsed ? 0.3 : 1,
-                                            background: 'rgba(255,255,255,0.1)',
-                                            border: '1px solid rgba(255,255,255,0.15)',
-                                            color: 'white'
-                                          }}
-                                        >
-                                          {w}
-                                        </button>
-                                      );
-                                    })}
-                                    <button
-                                      onClick={() => {
-                                        setReorderSelectedWords([]);
-                                        setReorderSuccess(null);
+                                return (
+                                  <span key={wIdx} style={{ display: 'inline-flex', alignItems: 'baseline', margin: '0 4px' }}>
+                                    <input
+                                      type="text"
+                                      value={userVal}
+                                      placeholder="_____"
+                                      onChange={(e) => setClozeUserAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                                      style={{
+                                        width: `${Math.max(cleanW.length * 12, 60)}px`,
+                                        padding: '0 2px',
+                                        fontSize: '1.25rem',
+                                        textAlign: 'center',
+                                        fontWeight: 800,
+                                        outline: 'none',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        borderBottom: clozeChecked 
+                                          ? (isCorrect ? '2px solid #22c55e' : '2px solid #ef4444') 
+                                          : '2px solid rgba(255,255,255,0.85)',
+                                        color: clozeChecked 
+                                          ? (isCorrect ? '#4ade80' : '#f87171') 
+                                          : '#ffffff',
+                                        transition: 'all 0.2s'
                                       }}
-                                      style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                                    >
-                                      Reiniciar
-                                    </button>
-                                  </div>
-
-                                  {reorderSuccess && (
-                                    <span style={{ fontSize: '0.85rem', color: '#22c55e', fontWeight: 700 }}>
-                                      ✨ Perfeito! Sentença montada corretamente!
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setReorderSubId(sub.id);
-                                    setReorderSelectedWords([]);
-                                    setReorderSuccess(null);
-                                  }}
-                                  className="btn btn-secondary"
-                                  style={{ alignSelf: 'flex-start', padding: '4px 10px', fontSize: '0.75rem' }}
-                                >
-                                  🧩 Jogar esta frase
-                                </button>
-                              )}
-                            </div>
+                                    />
+                                  </span>
+                                );
+                              })}
+                            </span>
                           ) : (
-                            /* Normal Dialogue Script view */
-                            <div style={{ fontSize: '1.05rem', fontWeight: 600, color: subtitleColor, lineHeight: 1.45 }}>
+                            /* Normal Text with Clickable Words */
+                            <span style={{ display: 'inline', flex: 1, color: '#f3f4f6' }}>
                               {words.map((w, wIdx) => {
                                 const cleanedW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"").trim();
-                                const isWordSelected = selectedWord === cleanedW && selectedWordContext === sub.text;
                                 return (
                                   <span
                                     key={wIdx}
-                                    className={`subtitle-word ${isWordSelected ? 'selected' : ''}`}
-                                    style={{ color: isWordSelected ? 'var(--accent)' : subtitleColor, marginRight: `${wordSpacing}px`, display: 'inline-block', cursor: 'pointer' }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleWordClick(w, sub.text);
+                                    onClick={() => handleWordClick(cleanedW, sub.text)}
+                                    style={{
+                                      marginRight: '6px',
+                                      cursor: 'pointer',
+                                      borderRadius: '3px',
+                                      padding: '0 2px',
+                                      transition: 'background 0.15s, color 0.15s'
                                     }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.25)';
+                                      e.currentTarget.style.color = '#facc15';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'transparent';
+                                      e.currentTarget.style.color = '#f3f4f6';
+                                    }}
+                                    title="Clique para ver significado e pronúncia"
                                   >
                                     {w}
                                   </span>
                                 );
                               })}
-                            </div>
-                          )}
-
-                          {/* Translation Line */}
-                          {sub.translation && (
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                              {sub.translation}
-                            </div>
+                            </span>
                           )}
                         </div>
                       );
                     })}
                   </div>
+
+                  {/* Bottom Minimal Actions Bar */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    alignItems: 'center',
+                    marginTop: '28px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid rgba(255,255,255,0.08)',
+                    flexWrap: 'wrap'
+                  }}>
+                    {shadowingGameMode === 'cloze' && (
+                      <>
+                        <button 
+                          onClick={handleCheckCloze}
+                          className="btn btn-primary"
+                          style={{ padding: '8px 18px', fontSize: '0.85rem', borderRadius: '20px', fontWeight: 700 }}
+                        >
+                          ✓ Verificar Respostas
+                        </button>
+                        <button 
+                          onClick={handleRevealCloze}
+                          className="btn btn-secondary"
+                          style={{ padding: '8px 18px', fontSize: '0.85rem', borderRadius: '20px' }}
+                        >
+                          👁️ Revelar Todas
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      onClick={handleOpenEditTranscriptModal}
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 18px', fontSize: '0.85rem', borderRadius: '20px' }}
+                      title="Editar o texto da transcrição completo"
+                    >
+                      ✏️ Ajustar Roteiro
+                    </button>
+
+                    <button
+                      onClick={() => setShadowingGameMode(prev => prev === 'cloze' ? 'normal' : 'cloze')}
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 18px', fontSize: '0.85rem', borderRadius: '20px' }}
+                    >
+                      {shadowingGameMode === 'cloze' ? 'Modo Leitura / Dicionário' : 'Modo Preencher Lacunas'}
+                    </button>
+                  </div>
+
                 </div>
               ) : (
                 /* Subtitles scrolling list */
@@ -4207,8 +3942,6 @@ Do not wrap in markdown code blocks like \`\`\`json. Return strictly raw JSON.`;
             </aside>
 
           </div>
-
-        </div>
       )}
 
       {/* Loading Overlay */}
