@@ -8,7 +8,7 @@ import {
   ChevronRight, ChevronLeft, Repeat, Volume2, Mic, Info, Star, Bookmark, Share2, 
   ArrowLeft, Download, RefreshCw, X, HelpCircle, Check, Sparkles, Menu,
   Copy, Plus, Maximize, Minimize, Eye, EyeOff, Expand, Shrink, Settings,
-  Search, FileText
+  Search, FileText, Languages, Trash2
 } from 'lucide-react';
 
 // --- Data Models & Types ---
@@ -394,6 +394,54 @@ export const MediaStudy: React.FC = () => {
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
   const [customVideoUrlInput, setCustomVideoUrlInput] = useState('');
   const [usedChipsIndices, setUsedChipsIndices] = useState<Record<number, boolean>>({});
+  // Translation visibility & Portuguese subtitles state
+  const [showTranslation, setShowTranslation] = useState<boolean>(false);
+  const [portugueseSubtitlesText, setPortugueseSubtitlesText] = useState<string>('');
+
+  // Sincronizar legendas/tradução em português inseridas nas configurações
+  const handleSavePortugueseSubtitles = () => {
+    if (!activeLesson) return;
+    const lines = portugueseSubtitlesText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+
+    const updatedSubs = activeLesson.subtitles.map((sub, idx) => ({
+      ...sub,
+      translation: lines[idx] !== undefined ? lines[idx] : sub.translation
+    }));
+
+    const updatedLesson = {
+      ...activeLesson,
+      subtitles: updatedSubs
+    };
+
+    setActiveLesson(updatedLesson);
+    // Persist in custom lessons
+    const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+    setCustomLessons(updatedCustom);
+    try {
+      localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom));
+    } catch {}
+
+    alert(`Tradução em português de ${lines.length} frases sincronizada com sucesso!`);
+  };
+
+  // Delete current lesson handler (Excluir lição)
+  const handleDeleteCurrentLesson = () => {
+    if (!activeLesson) return;
+    if (confirm(`Tem certeza que deseja excluir a lição "${activeLesson.title}"?`)) {
+      const updated = customLessons.filter(l => l.id !== activeLesson.id);
+      setCustomLessons(updated);
+      try {
+        localStorage.setItem('hl_custom_lessons', JSON.stringify(updated));
+      } catch {}
+      
+      const nextLesson = updated.length > 0 ? updated[0] : PRELOADED_LESSONS[0];
+      setActiveLesson(nextLesson);
+      setCurrentSentenceIndex(0);
+      setIsConfigDrawerOpen(false);
+      alert('Lição excluída com sucesso!');
+    }
+  };
 
   // Voice recording / Pronunciation check states
   const [isRecording, setIsRecording] = useState(false);
@@ -1094,46 +1142,13 @@ export const MediaStudy: React.FC = () => {
         margin: '0 auto',
         position: 'relative'
       }}>
-        {/* Left Side Controls Column: Lições button + Left Chevron (<) */}
+        {/* Left Side Controls: Left Chevron (<) */}
         <div style={{
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
-          gap: '16px'
+          justifyContent: 'center',
+          minWidth: '46px'
         }}>
-          {/* Lições Button */}
-          <button
-            onClick={() => setIsLessonsModalOpen(true)}
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#d1d5db',
-              borderRadius: '8px',
-              padding: '8px 10px',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '4px',
-              transition: 'background 0.2s',
-              minWidth: '54px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
-              e.currentTarget.style.color = '#38bdf8';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.color = '#d1d5db';
-            }}
-            title="Ver lições e materiais disponíveis"
-          >
-            <Menu size={18} />
-            <span style={{ fontSize: '0.72rem' }}>Lições</span>
-          </button>
-
           {/* Left Chevron (<) Button */}
           <button
             onClick={handlePrevSentence}
@@ -1156,7 +1171,7 @@ export const MediaStudy: React.FC = () => {
           </button>
         </div>
 
-        {/* Video Player Card (Expanded space with maxWidth 840px) */}
+        {/* Video Player Card (Expanded space with maxWidth 860px) */}
         <div style={{
           flex: 1,
           maxWidth: '860px',
@@ -1194,46 +1209,76 @@ export const MediaStudy: React.FC = () => {
           )}
         </div>
 
-        {/* Right Side Controls Column: Settings button + Right Chevron (>) */}
+        {/* Right Side Controls Column: Discrete Icons for Lições & Settings + Right Chevron (>) */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '16px'
+          gap: '14px',
+          minWidth: '46px'
         }}>
-          {/* Settings Trigger Button */}
-          <button
-            onClick={() => setIsConfigDrawerOpen(true)}
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#9ca3af',
-              borderRadius: '8px',
-              padding: '8px 10px',
-              fontSize: '0.78rem',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '4px',
-              transition: 'all 0.2s',
-              minWidth: '54px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#38bdf8';
-              e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-              e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#9ca3af';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-            }}
-            title="Configurações (Link do vídeo, Modo de treino, Legendas)"
-          >
-            <Settings size={18} />
-            <span style={{ fontSize: '0.70rem', fontWeight: 600 }}>Ajustes</span>
-          </button>
+          {/* Subtle icon buttons group */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Discrete Lições Icon Button */}
+            <button
+              onClick={() => setIsLessonsModalOpen(true)}
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#9ca3af',
+                borderRadius: '8px',
+                padding: '7px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#38bdf8';
+                e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#9ca3af';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+              }}
+              title="Lições e Materiais de Vídeo"
+            >
+              <Menu size={18} />
+            </button>
+
+            {/* Discrete Settings Icon Button */}
+            <button
+              onClick={() => setIsConfigDrawerOpen(true)}
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#9ca3af',
+                borderRadius: '8px',
+                padding: '7px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#38bdf8';
+                e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#9ca3af';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+              }}
+              title="Configurações (Link do vídeo, Modo de exercício, Legendas em português, Excluir lição)"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
 
           {/* Right Chevron (>) Button */}
           <button
@@ -1369,6 +1414,28 @@ export const MediaStudy: React.FC = () => {
           Mostrar
         </button>
 
+        {/* Discrete Translation Toggle Icon Button (Opção de tradução da sentença) */}
+        <button
+          onClick={() => setShowTranslation(prev => !prev)}
+          style={{
+            backgroundColor: showTranslation ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+            border: showTranslation ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
+            color: showTranslation ? '#38bdf8' : '#9ca3af',
+            borderRadius: '8px',
+            padding: '7px 10px',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s'
+          }}
+          title={showTranslation ? 'Ocultar tradução em português' : 'Mostrar tradução em português'}
+        >
+          <Languages size={17} />
+          <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>PT</span>
+        </button>
+
         {/* Blue Microphone Icon Button */}
         <button
           onClick={isRecording ? stopRecordingSpeech : startRecordingSpeech}
@@ -1388,6 +1455,30 @@ export const MediaStudy: React.FC = () => {
           <Mic size={22} className={isRecording ? 'pulse' : ''} />
         </button>
       </div>
+
+      {/* Discrete Inline Translation Line (Mostra a tradução da frase de forma sutil) */}
+      {showTranslation && currentSub && (
+        <div style={{
+          maxWidth: '720px',
+          margin: '2px auto 0',
+          textAlign: 'center',
+          animation: 'fadeIn 0.2s ease',
+          padding: '4px 12px'
+        }}>
+          <span style={{
+            fontSize: '0.88rem',
+            color: '#a7f3d0',
+            fontStyle: 'italic',
+            letterSpacing: '0.01em',
+            background: 'rgba(16, 185, 129, 0.08)',
+            padding: '4px 14px',
+            borderRadius: '6px',
+            border: '1px solid rgba(16, 185, 129, 0.2)'
+          }}>
+            🇧🇷 {currentSub.translation || 'Sem tradução em português configurada.'}
+          </span>
+        </div>
+      )}
 
       {/* Info Popover Details (if toggled) */}
       {isInfoModalOpen && currentSub && (
@@ -1972,7 +2063,7 @@ export const MediaStudy: React.FC = () => {
               </label>
             </div>
 
-            {/* Section 3: Legendas & Upload */}
+            {/* Section 3: Legendas em Português & Arquivos */}
             <div style={{
               backgroundColor: 'rgba(255, 255, 255, 0.04)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -1980,14 +2071,54 @@ export const MediaStudy: React.FC = () => {
               padding: '16px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '10px'
+              gap: '12px'
             }}>
               <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
-                📁 Legendas e Transcrição
+                🇧🇷 Legendas e Tradução em Português
               </span>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af' }}>
-                Gerencie arquivos .SRT, extração com IA ou cole as frases deste vídeo:
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Insira as traduções frase por frase (uma por linha) para sincronizar com as legendas do vídeo:
               </p>
+              <textarea
+                rows={4}
+                value={portugueseSubtitlesText}
+                onChange={(e) => setPortugueseSubtitlesText(e.target.value)}
+                placeholder={"Exemplo:\npessoas que são diferentes\nnunca deveriam sentir que não pertencem\nhoje nós vamos nos posicionar..."}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  padding: '8px 10px',
+                  fontSize: '0.82rem',
+                  outline: 'none',
+                  resize: 'vertical'
+                }}
+              />
+              <button
+                onClick={handleSavePortugueseSubtitles}
+                disabled={!portugueseSubtitlesText.trim()}
+                style={{
+                  backgroundColor: portugueseSubtitlesText.trim() ? '#10b981' : 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  color: portugueseSubtitlesText.trim() ? '#ffffff' : '#6b7280',
+                  borderRadius: '6px',
+                  padding: '8px 14px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: portugueseSubtitlesText.trim() ? 'pointer' : 'default',
+                  transition: 'background 0.2s'
+                }}
+              >
+                Salvar Tradução em Português
+              </button>
+
+              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '4px 0' }} />
+
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#d1d5db' }}>
+                📁 Arquivos de Legenda (.SRT)
+              </span>
               <button
                 onClick={() => {
                   setIsConfigDrawerOpen(false);
@@ -2009,7 +2140,55 @@ export const MediaStudy: React.FC = () => {
                 }}
               >
                 <Upload size={15} />
-                <span>Gerenciar Legendas do Vídeo</span>
+                <span>Enviar Arquivo .SRT / .VTT</span>
+              </button>
+            </div>
+
+            {/* Section 4: Excluir Lição Atual */}
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.06)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              marginTop: '4px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f87171' }}>
+                🗑️ Excluir Lição
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Remove permanentemente a lição ativa (<strong>{activeLesson.title}</strong>) da sua lista.
+              </p>
+              <button
+                onClick={handleDeleteCurrentLesson}
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  borderRadius: '6px',
+                  padding: '9px 14px',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ef4444';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+                  e.currentTarget.style.color = '#f87171';
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Excluir Esta Lição</span>
               </button>
             </div>
           </div>
