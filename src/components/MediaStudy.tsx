@@ -566,6 +566,15 @@ export const MediaStudy: React.FC = () => {
     return url;
   };
 
+  const isFebboxUrl = (url: string) => {
+    return typeof url === 'string' && url.includes('febbox.com');
+  };
+
+  const getFebboxEmbedUrl = (url: string) => {
+    if (!url) return '';
+    return url;
+  };
+
   // Media seek and play controls
   const seekTo = (seconds: number) => {
     if (youtubePlayer && youtubePlayerReady) {
@@ -936,6 +945,29 @@ export const MediaStudy: React.FC = () => {
       return;
     }
 
+    if (isFebboxUrl(url)) {
+      const newLesson: Lesson = {
+        id: `custom-febbox-${Date.now()}`,
+        title: 'Febbox Cloud Video',
+        description: 'Vídeo importado da nuvem Febbox para prática de escuta.',
+        videoUrl: url,
+        subtitles: [
+          {
+            id: 1,
+            start: 0.0,
+            end: 5.0,
+            text: 'Practice listening with Febbox video',
+            translation: 'Pratique a escuta com o vídeo do Febbox'
+          }
+        ]
+      };
+      setActiveLesson(newLesson);
+      setCurrentSentenceIndex(0);
+      setCustomVideoUrlInput('');
+      setIsUploadModalOpen(true);
+      return;
+    }
+
     // Generic MP4 / direct link fallback
     const newLesson: Lesson = {
       id: `custom-video-${Date.now()}`,
@@ -1195,6 +1227,14 @@ export const MediaStudy: React.FC = () => {
               allow="autoplay; encrypted-media"
               allowFullScreen
               title="Google Drive Video"
+            />
+          ) : isFebboxUrl(activeLesson.videoUrl) ? (
+            <iframe
+              src={getFebboxEmbedUrl(activeLesson.videoUrl)}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+              title="Febbox Cloud Video"
             />
           ) : (
             <video
@@ -1939,13 +1979,13 @@ export const MediaStudy: React.FC = () => {
                 🔗 Carregar Link Exato do Vídeo
               </span>
               <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
-                Insira o link direto do YouTube ou Google Drive que você deseja praticar:
+                Insira o link direto do YouTube, Google Drive ou Febbox (ex: febbox.com/share/...):
               </p>
               <input
                 type="text"
                 value={customVideoUrlInput}
                 onChange={(e) => setCustomVideoUrlInput(e.target.value)}
-                placeholder="Ex: https://www.youtube.com/watch?v=... ou link do Drive"
+                placeholder="Ex: YouTube, Google Drive ou https://www.febbox.com/share/..."
                 style={{
                   width: '100%',
                   backgroundColor: 'rgba(255, 255, 255, 0.06)',
