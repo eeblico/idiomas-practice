@@ -389,6 +389,12 @@ export const MediaStudy: React.FC = () => {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Training mode: 'typing' (escrever nas lacunas) | 'chips' (apertar nas palavras para organizar)
+  const [practiceMode, setPracticeMode] = useState<'typing' | 'chips'>('typing');
+  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
+  const [customVideoUrlInput, setCustomVideoUrlInput] = useState('');
+  const [usedChipsIndices, setUsedChipsIndices] = useState<Record<number, boolean>>({});
+
   // Voice recording / Pronunciation check states
   const [isRecording, setIsRecording] = useState(false);
   const [userTranscript, setUserTranscript] = useState('');
@@ -437,8 +443,11 @@ export const MediaStudy: React.FC = () => {
   // Scrambled unique chips for word bank
   const scrambledChips = useMemo(() => {
     if (sentenceWords.length === 0) return [];
-    return [...sentenceWords]
-      .map(w => w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, ''))
+    return sentenceWords
+      .map((w, originalIdx) => ({
+        originalIdx,
+        clean: w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, '')
+      }))
       .sort(() => Math.random() - 0.5);
   }, [currentSub?.id, sentenceWords.length]);
 
@@ -454,17 +463,20 @@ export const MediaStudy: React.FC = () => {
   // Reset words and gaps whenever sentence changes
   useEffect(() => {
     setSolvedWordIndices({});
+    setUsedChipsIndices({});
     setActiveSlotIndex(0);
     setCurrentInputWord('');
     setShowAnswer(false);
     setUserTranscript('');
     setCompareScore(null);
 
-    // Focus active typing slot
-    setTimeout(() => {
-      slotInputRef.current?.focus();
-    }, 120);
-  }, [currentSentenceIndex, activeLesson?.id]);
+    // Focus active typing slot if in typing mode
+    if (practiceMode === 'typing') {
+      setTimeout(() => {
+        slotInputRef.current?.focus();
+      }, 120);
+    }
+  }, [currentSentenceIndex, activeLesson?.id, practiceMode]);
 
   // Helper to extract YouTube Video ID
   const getYoutubeVideoId = (url: string): string | null => {
@@ -529,7 +541,24 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
-  // Replay current sentence (Action of the blue "Repetir" button)
+  // Play system TTS phrase audio (Áudio falado pelo sistema)
+  const playSystemTtsSentence = () => {
+    if (!currentSub) return;
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); // Stop any pending speech
+        const { dialogue } = parseSpeakerAndText(currentSub.text);
+        const utterance = new SpeechSynthesisUtterance(dialogue);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.95;
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (err) {
+      console.warn('Speech synthesis error:', err);
+    }
+  };
+
+  // Replay current sentence from video audio (Action of the blue "Repetir" button)
   const handleReplaySentence = () => {
     if (!currentSub) return;
     seekTo(currentSub.start);
@@ -605,7 +634,7 @@ export const MediaStudy: React.FC = () => {
   };
 
   // Clicking a scrambled chip to fill current active slot
-  const handleChipClick = (chipWord: string) => {
+  const handleChipClick = (chipWord: string, chipIdx: number) => {
     const targetWord = sentenceWords[activeSlotIndex];
     if (!targetWord) return;
 
@@ -613,6 +642,7 @@ export const MediaStudy: React.FC = () => {
       playSuccessChime();
       const updated = { ...solvedWordIndices, [activeSlotIndex]: true };
       setSolvedWordIndices(updated);
+      setUsedChipsIndices(prev => ({ ...prev, [chipIdx]: true }));
       setCurrentInputWord('');
 
       const nextUnsolved = sentenceWords.findIndex((_, idx) => !updated[idx]);
@@ -806,19 +836,17 @@ export const MediaStudy: React.FC = () => {
     setIsRecording(false);
   };
 
-  // Search Bar / URL Input Handler
-  const handleSearchOrUrlSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
+  // Direct Video URL loader from hidden configuration sidebar
+  const loadCustomVideoUrl = (rawUrl: string) => {
+    const url = rawUrl.trim();
+    if (!url) return;
 
-    // Check if query is YouTube URL
-    const ytId = getYoutubeVideoId(query);
+    const ytId = getYoutubeVideoId(url);
     if (ytId) {
       const newLesson: Lesson = {
         id: `custom-yt-${Date.now()}`,
-        title: `YouTube Video (${ytId})`,
-        description: 'Vídeo importado para treino de Shadowing e escuta ativa.',
+        title: `YouTube (${ytId})`,
+        description: 'Vídeo importado pelo usuário para escuta ativa.',
         videoUrl: `https://www.youtube.com/watch?v=${ytId}`,
         subtitles: [
           {
@@ -832,18 +860,17 @@ export const MediaStudy: React.FC = () => {
       };
       setActiveLesson(newLesson);
       setCurrentSentenceIndex(0);
-      setSearchQuery('');
-      setIsUploadModalOpen(true); // Prompt to upload or extract subtitles
+      setCustomVideoUrlInput('');
+      setIsUploadModalOpen(true);
       return;
     }
 
-    // Check if Google Drive URL
-    if (isGoogleDriveUrl(query)) {
+    if (isGoogleDriveUrl(url)) {
       const newLesson: Lesson = {
         id: `custom-drive-${Date.now()}`,
         title: 'Google Drive Video',
-        description: 'Vídeo do Google Drive para prática de escuta.',
-        videoUrl: query,
+        description: 'Vídeo importado do Google Drive.',
+        videoUrl: url,
         subtitles: [
           {
             id: 1,
@@ -856,8 +883,49 @@ export const MediaStudy: React.FC = () => {
       };
       setActiveLesson(newLesson);
       setCurrentSentenceIndex(0);
-      setSearchQuery('');
+      setCustomVideoUrlInput('');
       setIsUploadModalOpen(true);
+      return;
+    }
+
+    // Generic MP4 / direct link fallback
+    const newLesson: Lesson = {
+      id: `custom-video-${Date.now()}`,
+      title: 'Vídeo Personalizado',
+      description: 'Vídeo carregado via link direto.',
+      videoUrl: url,
+      subtitles: [
+        {
+          id: 1,
+          start: 0.0,
+          end: 5.0,
+          text: 'Practice listening with your video',
+          translation: 'Pratique a escuta com o seu vídeo'
+        }
+      ]
+    };
+    setActiveLesson(newLesson);
+    setCurrentSentenceIndex(0);
+    setCustomVideoUrlInput('');
+    setIsUploadModalOpen(true);
+  };
+
+  // Search Bar / URL Input Handler
+  const handleSearchOrUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    // Check if query is YouTube URL
+    const ytId = getYoutubeVideoId(query);
+    if (ytId) {
+      loadCustomVideoUrl(query);
+      return;
+    }
+
+    // Check if Google Drive URL
+    if (isGoogleDriveUrl(query)) {
+      loadCustomVideoUrl(query);
       return;
     }
 
@@ -1015,141 +1083,73 @@ export const MediaStudy: React.FC = () => {
       width: '100%'
     }}>
 
-      {/* 1. TOP BAR: Search & Link Input Bar with Auto dropdown */}
+      {/* 1. TOP BAR: Minimalist header with Lições button and hidden Settings cog for video URL & mode */}
       <div style={{
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        gap: '6px',
-        width: '100%'
+        justifyContent: 'space-between',
+        width: '100%',
+        maxWidth: '720px',
+        margin: '0 auto',
+        padding: '2px 4px'
       }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          width: '100%',
-          maxWidth: '720px'
-        }}>
-          {/* Language Selector Dropdown */}
-          <div style={{ position: 'relative' }}>
-            <select
-              value={languageFilter}
-              onChange={(e) => setLanguageFilter(e.target.value)}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                color: '#e5e7eb',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                outline: 'none',
-                appearance: 'none',
-                paddingRight: '26px'
-              }}
-            >
-              <option value="auto" style={{ background: '#1e222b', color: 'white' }}>auto ▾</option>
-              <option value="en" style={{ background: '#1e222b', color: 'white' }}>Inglês (EN)</option>
-              <option value="es" style={{ background: '#1e222b', color: 'white' }}>Espanhol (ES)</option>
-              <option value="fr" style={{ background: '#1e222b', color: 'white' }}>Francês (FR)</option>
-            </select>
-          </div>
+        {/* Lições Button */}
+        <button
+          onClick={() => setIsLessonsModalOpen(true)}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#d1d5db',
+            borderRadius: '8px',
+            padding: '7px 14px',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'background 0.2s'
+          }}
+          title="Ver lições e materiais disponíveis"
+        >
+          <Menu size={16} />
+          <span>Lições</span>
+        </button>
 
-          {/* Search / URL Input Box */}
-          <form 
-            onSubmit={handleSearchOrUrlSubmit}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.07)',
-              border: '1px solid rgba(255, 255, 255, 0.18)',
-              borderRadius: '24px',
-              padding: '6px 16px',
-              transition: 'border 0.2s',
-              gap: '10px'
-            }}
-          >
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Procure por um vídeo ou música (link YouTube ou Drive)"
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                color: '#ffffff',
-                fontSize: '0.88rem'
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#9ca3af',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '2px'
-              }}
-              title="Pesquisar ou carregar vídeo"
-            >
-              <Search size={16} />
-            </button>
-          </form>
-
-          {/* Quick Subtitle / Lessons Action Pills */}
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => setIsUploadModalOpen(true)}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#d1d5db',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              title="Upload ou extração de legendas"
-            >
-              <Upload size={14} />
-              <span>Legenda</span>
-            </button>
-
-            <button
-              onClick={() => setIsLessonsModalOpen(true)}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#d1d5db',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              title="Materiais e vídeos disponíveis"
-            >
-              <Menu size={14} />
-              <span>Lições</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Developed with YouTube subtle caption */}
-        <span style={{ fontSize: '0.7rem', color: '#6b7280', letterSpacing: '0.02em' }}>
-          Developed with YouTube
+        {/* Video Title in subtle styling */}
+        <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '380px', textAlign: 'center' }}>
+          {activeLesson?.title || 'Shadowing Practice'}
         </span>
+
+        {/* Hidden Configuration Trigger Button (Opens Settings sidebar at right) */}
+        <button
+          onClick={() => setIsConfigDrawerOpen(true)}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#9ca3af',
+            borderRadius: '8px',
+            padding: '7px 12px',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#38bdf8';
+            e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#9ca3af';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          }}
+          title="Configurações (Link do vídeo, Modo de exercício, Legendas)"
+        >
+          <Settings size={17} />
+          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Configurações</span>
+        </button>
       </div>
 
       {/* 2. CENTER STAGE: Navigation Chevrons (< and >) with 16:9 Video Player */}
@@ -1244,14 +1244,15 @@ export const MediaStudy: React.FC = () => {
         </button>
       </div>
 
-      {/* 3. TRAINING CONTROLS BAR: (i) Info | [ Repetir ] | [ Mostrar ] | [ 🎙️ ] */}
+      {/* 3. TRAINING CONTROLS BAR: (i) Info | [ Play Áudio Sistema ] | [ Repetir Vídeo ] | [ Mostrar ] | [ 🎙️ Mic ] */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '20px',
+        gap: '16px',
         padding: '6px 0',
-        width: '100%'
+        width: '100%',
+        flexWrap: 'wrap'
       }}>
         {/* Info Icon Button (i) */}
         <button
@@ -1273,7 +1274,38 @@ export const MediaStudy: React.FC = () => {
           <Info size={20} />
         </button>
 
-        {/* Blue Repetir Button (Action principal) */}
+        {/* Play System Audio Button (Ouvir frase gerada pelo áudio do sistema) */}
+        <button
+          onClick={playSystemTtsSentence}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            color: '#38bdf8',
+            borderRadius: '8px',
+            padding: '9px 18px',
+            fontSize: '0.92rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
+            e.currentTarget.style.borderColor = '#38bdf8';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+          }}
+          title="Ouvir a frase pelo áudio do sistema"
+        >
+          <Volume2 size={18} />
+          <span>Ouvir Frase</span>
+        </button>
+
+        {/* Blue Repetir Button (Áudio do vídeo - Ação principal) */}
         <button
           onClick={handleReplaySentence}
           style={{
@@ -1281,7 +1313,7 @@ export const MediaStudy: React.FC = () => {
             color: '#ffffff',
             border: 'none',
             borderRadius: '8px',
-            padding: '9px 36px',
+            padding: '9px 34px',
             fontSize: '0.95rem',
             fontWeight: 700,
             cursor: 'pointer',
@@ -1293,9 +1325,10 @@ export const MediaStudy: React.FC = () => {
           }}
           onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
           onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          title="Repetir este trecho de áudio"
+          title="Repetir o trecho de áudio do vídeo"
         >
-          Repetir
+          <Repeat size={16} />
+          <span>Repetir</span>
         </button>
 
         {/* Grey Mostrar Button */}
@@ -1306,7 +1339,7 @@ export const MediaStudy: React.FC = () => {
             color: '#d1d5db',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '8px',
-            padding: '9px 32px',
+            padding: '9px 28px',
             fontSize: '0.95rem',
             fontWeight: 600,
             cursor: 'pointer',
@@ -1430,48 +1463,52 @@ export const MediaStudy: React.FC = () => {
           {sentenceWords.map((word, idx) => {
             const isSolved = solvedWordIndices[idx] || showAnswer;
             const isActive = activeSlotIndex === idx && !isSolved;
+            // Check if current input in typing mode has an incorrect prefix
+            const hasTypingError = isActive && practiceMode === 'typing' && currentInputWord.length > 0 && !cleanWordForComparison(word).startsWith(cleanWordForComparison(currentInputWord));
 
             return (
               <div
                 key={idx}
                 onClick={() => {
-                  if (!isSolved) {
+                  if (!isSolved && practiceMode === 'typing') {
                     setActiveSlotIndex(idx);
                     slotInputRef.current?.focus();
                   }
                 }}
                 style={{
-                  height: '42px',
-                  minWidth: `${Math.max(word.length * 14, 85)}px`,
-                  backgroundColor: '#262c37', // Dark horizontal box matching screenshot
-                  border: isActive 
-                    ? '2px solid #38bdf8' 
-                    : isSolved 
-                      ? '1px solid rgba(74, 222, 128, 0.4)' 
-                      : '1px solid #374151',
-                  borderRadius: '4px',
+                  height: '44px',
+                  minWidth: `${Math.max(word.length * 15, 80)}px`,
+                  backgroundColor: '#262c37', // Dark horizontal box matching reference
+                  border: isSolved 
+                    ? '2px solid rgba(74, 222, 128, 0.55)' 
+                    : hasTypingError
+                      ? '2px solid rgba(239, 68, 68, 0.6)'
+                      : isActive 
+                        ? '2px solid #38bdf8' 
+                        : '1px solid #374151',
+                  borderRadius: '5px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '4px 14px',
-                  boxShadow: isActive ? '0 0 10px rgba(56, 189, 248, 0.3)' : 'none',
-                  cursor: isSolved ? 'default' : 'pointer',
+                  boxShadow: isActive ? '0 0 12px rgba(56, 189, 248, 0.25)' : 'none',
+                  cursor: isSolved ? 'default' : practiceMode === 'typing' ? 'text' : 'pointer',
                   transition: 'all 0.15s ease',
                   position: 'relative'
                 }}
               >
                 {isSolved ? (
-                  /* Word displayed in bright green matching screenshot */
+                  /* Word displayed in bright emerald green matching screenshot */
                   <span style={{
                     color: '#4ade80', // Emerald green text
                     fontWeight: 700,
-                    fontSize: '1.18rem',
+                    fontSize: '1.2rem',
                     letterSpacing: '0.01em',
                     userSelect: 'none'
                   }}>
                     {word}
                   </span>
-                ) : isActive ? (
+                ) : practiceMode === 'typing' && isActive ? (
                   /* Active inline input for focused typing */
                   <input
                     ref={slotInputRef}
@@ -1485,8 +1522,8 @@ export const MediaStudy: React.FC = () => {
                       background: 'transparent',
                       border: 'none',
                       outline: 'none',
-                      color: '#ffffff',
-                      fontSize: '1.18rem',
+                      color: hasTypingError ? '#f87171' : '#ffffff',
+                      fontSize: '1.2rem',
                       fontWeight: 700,
                       textAlign: 'center'
                     }}
@@ -1500,36 +1537,64 @@ export const MediaStudy: React.FC = () => {
           })}
         </div>
 
-        {/* Scrambled Word Bank Chips (Auxiliar para montar clicando) */}
+        {/* Word Bank Chips (Aparece no modo 'chips' para organizar, ou modo 'typing' como apoio) */}
         {!showAnswer && (
           <div style={{
             display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
+            flexDirection: 'column',
+            alignItems: 'center',
             gap: '8px',
-            marginTop: '8px'
+            marginTop: '6px',
+            width: '100%'
           }}>
-            {scrambledChips.map((chip, cIdx) => (
-              <button
-                key={cIdx}
-                onClick={() => handleChipClick(chip)}
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#e5e7eb',
-                  borderRadius: '16px',
-                  padding: '5px 14px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)'}
-              >
-                {chip}
-              </button>
-            ))}
+            {practiceMode === 'chips' && (
+              <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500 }}>
+                👉 Clique nas palavras abaixo para montar a frase na ordem correta:
+              </span>
+            )}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '10px'
+            }}>
+              {scrambledChips.map((chipObj, cIdx) => {
+                const isChipUsed = usedChipsIndices[cIdx];
+                return (
+                  <button
+                    key={cIdx}
+                    onClick={() => !isChipUsed && handleChipClick(chipObj.clean, cIdx)}
+                    disabled={isChipUsed}
+                    style={{
+                      backgroundColor: isChipUsed ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.07)',
+                      border: isChipUsed ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(255, 255, 255, 0.15)',
+                      color: isChipUsed ? '#4b5563' : '#e5e7eb',
+                      borderRadius: '16px',
+                      padding: '6px 16px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: isChipUsed ? 'default' : 'pointer',
+                      transition: 'all 0.15s',
+                      textDecoration: isChipUsed ? 'line-through' : 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isChipUsed) {
+                        e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.18)';
+                        e.currentTarget.style.borderColor = '#38bdf8';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isChipUsed) {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.07)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                      }
+                    }}
+                  >
+                    {chipObj.clean}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -1738,6 +1803,237 @@ export const MediaStudy: React.FC = () => {
         </div>
       )}
 
+      {/* 7. HIDDEN CONFIGURATION SIDEBAR DRAWER (Aparece ao clicar em "Configurações" no topo direito) */}
+      {isConfigDrawerOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 1100,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '420px',
+            height: '100%',
+            backgroundColor: '#161922',
+            borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+            boxShadow: '-8px 0 28px rgba(0, 0, 0, 0.7)',
+            padding: '24px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            overflowY: 'auto'
+          }}>
+            {/* Drawer Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={20} color="#38bdf8" />
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Configurações</h3>
+              </div>
+              <button
+                onClick={() => setIsConfigDrawerOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Section 1: Link Direto do Vídeo */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
+                🔗 Carregar Link Exato do Vídeo
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Insira o link direto do YouTube ou Google Drive que você deseja praticar:
+              </p>
+              <input
+                type="text"
+                value={customVideoUrlInput}
+                onChange={(e) => setCustomVideoUrlInput(e.target.value)}
+                placeholder="Ex: https://www.youtube.com/watch?v=... ou link do Drive"
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  padding: '9px 12px',
+                  fontSize: '0.84rem',
+                  outline: 'none'
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (customVideoUrlInput.trim()) {
+                    loadCustomVideoUrl(customVideoUrlInput);
+                    setIsConfigDrawerOpen(false);
+                  }
+                }}
+                disabled={!customVideoUrlInput.trim()}
+                style={{
+                  backgroundColor: customVideoUrlInput.trim() ? '#0284c7' : 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  color: customVideoUrlInput.trim() ? '#ffffff' : '#6b7280',
+                  borderRadius: '6px',
+                  padding: '9px 16px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: customVideoUrlInput.trim() ? 'pointer' : 'default',
+                  transition: 'background 0.2s'
+                }}
+              >
+                Carregar Vídeo
+              </button>
+            </div>
+
+            {/* Section 2: Modo de Exercício (Lacunas para escrever vs Palavras para organizar) */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
+                🎮 Modo de Exercício da Frase
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Escolha como deseja praticar a frase da legenda:
+              </p>
+
+              {/* Option A: Escrever nas lacunas */}
+              <label 
+                onClick={() => setPracticeMode('typing')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: practiceMode === 'typing' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                  border: practiceMode === 'typing' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.06)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                <input
+                  type="radio"
+                  name="practiceMode"
+                  checked={practiceMode === 'typing'}
+                  onChange={() => setPracticeMode('typing')}
+                  style={{ marginTop: '3px' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: practiceMode === 'typing' ? '#38bdf8' : '#ffffff' }}>
+                    ✍️ Escrever / Completar nas lacunas
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Digite as palavras diretamente dentro das caixas retangulares.
+                  </span>
+                </div>
+              </label>
+
+              {/* Option B: Apertar nas palavras para organizar */}
+              <label 
+                onClick={() => setPracticeMode('chips')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: practiceMode === 'chips' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                  border: practiceMode === 'chips' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.06)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                <input
+                  type="radio"
+                  name="practiceMode"
+                  checked={practiceMode === 'chips'}
+                  onChange={() => setPracticeMode('chips')}
+                  style={{ marginTop: '3px' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: practiceMode === 'chips' ? '#38bdf8' : '#ffffff' }}>
+                    🧩 Apertar nas palavras para organizar
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Clique nos botões de palavras para montar a frase na ordem certa.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Section 3: Legendas & Upload */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
+                📁 Legendas e Transcrição
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af' }}>
+                Gerencie arquivos .SRT, extração com IA ou cole as frases deste vídeo:
+              </p>
+              <button
+                onClick={() => {
+                  setIsConfigDrawerOpen(false);
+                  setIsUploadModalOpen(true);
+                }}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Upload size={15} />
+                <span>Gerenciar Legendas do Vídeo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
+
