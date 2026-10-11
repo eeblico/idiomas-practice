@@ -950,14 +950,16 @@ export const MediaStudy: React.FC = () => {
   };
 
   // Direct Video URL loader from hidden configuration sidebar
-  const loadCustomVideoUrl = (rawUrl: string) => {
+  const loadCustomVideoUrl = async (rawUrl: string) => {
     const url = rawUrl.trim();
     if (!url) return;
 
     const ytId = getYoutubeVideoId(url);
     if (ytId) {
-      const newLesson: Lesson = {
-        id: `custom-yt-${Date.now()}`,
+      // Cria a lição provisória
+      const newLessonId = `custom-yt-${Date.now()}`;
+      const provisionalLesson: Lesson = {
+        id: newLessonId,
         title: `YouTube (${ytId})`,
         description: 'Vídeo importado pelo usuário para escuta ativa.',
         videoUrl: `https://www.youtube.com/watch?v=${ytId}`,
@@ -966,14 +968,37 @@ export const MediaStudy: React.FC = () => {
             id: 1,
             start: 0.0,
             end: 5.0,
-            text: 'Loading subtitles or ready to practice listening',
-            translation: 'Carregando legendas ou pronto para praticar escuta'
+            text: 'Buscando legendas automáticas do YouTube...',
+            translation: 'Buscando legendas...'
           }
         ]
       };
-      setActiveLesson(newLesson);
+      setActiveLesson(provisionalLesson);
       setCurrentSentenceIndex(0);
       setCustomVideoUrlInput('');
+
+      // Tenta captar a legenda do YouTube automaticamente caso o usuário não forneça
+      setIsExtractingSubs(true);
+      setExtractProgressText('Captando legendas originais do YouTube...');
+      try {
+        const autoSubs = await fetchYouTubeCaptions(ytId);
+        if (autoSubs && autoSubs.length > 0) {
+          const loadedLesson: Lesson = {
+            ...provisionalLesson,
+            subtitles: autoSubs
+          };
+          setActiveLesson(loadedLesson);
+          const updatedCustom = [...customLessons.filter(l => l.id !== loadedLesson.id), loadedLesson];
+          setCustomLessons(updatedCustom);
+          try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+          setIsExtractingSubs(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Auto fetch subtitle error:', err);
+      }
+      setIsExtractingSubs(false);
+      // Se não captou automaticamente, abre modal para upload de arquivo .SRT ou colar legendas
       setIsUploadModalOpen(true);
       return;
     }
@@ -1077,18 +1102,116 @@ export const MediaStudy: React.FC = () => {
   };
 
   // Subtitle Extraction logic (YouTube Captions / Gemini AI)
+  // Fetch actual YouTube subtitles from the video
+  const fetchYouTubeCaptions = async (videoId: string): Promise<Subtitle[] | null> => {
+    try {
+      // 1. Try local Vite dev server /api/youtube-transcript endpoint
+      const response = await fetch(`/api/youtube-transcript?videoId=${encodeURIComponent(videoId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && Array.isArray(data.transcript) && data.transcript.length > 0) {
+          const subs: Subtitle[] = data.transcript
+            .map((item: any, idx: number) => {
+              const startSec = Math.max(0, Math.round(((item.offset || 0) / 1000) * 10) / 10);
+              const durationSec = Math.max(1.8, Math.round(((item.duration || 3000) / 1000) * 10) / 10);
+              const cleanTxt = decodeHtmlEntities((item.text || '').replace(/\n+/g, ' ')).trim();
+              return {
+                id: idx + 1,
+                start: startSec,
+                end: Math.round((startSec + durationSec) * 10) / 10,
+                text: cleanTxt,
+                translation: ''
+              };
+            })
+            .filter((s: Subtitle) => s.text.length > 0 && !/^\[.*\]$/.test(s.text));
+
+          if (subs.length > 0) return subs;
+        }
+      }
+    } catch (err) {
+      console.warn('Endpoint /api/youtube-transcript failed, attempting client-side fallback:', err);
+    }
+
+    // 2. Client-side fallback via open CORS proxies if running in pure static/Vercel
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`;
+      const pageRes = await fetch(proxyUrl);
+      if (pageRes.ok) {
+        const html = await pageRes.text();
+        const captionIdx = html.indexOf('"captionTracks":');
+        if (captionIdx !== -1) {
+          const endIdx = html.indexOf(']', captionIdx);
+          const rawTracks = html.slice(captionIdx + '"captionTracks":'.length, endIdx + 1);
+          const tracks = JSON.parse(rawTracks);
+          const selectedTrack = tracks.find((t: any) => t.languageCode === 'en' || (t.vssId && t.vssId.includes('en'))) || tracks[0];
+          if (selectedTrack?.baseUrl) {
+            const timedRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(selectedTrack.baseUrl)}`);
+            const xml = await timedRes.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xml, 'text/xml');
+            const textNodes = xmlDoc.getElementsByTagName('text');
+            if (textNodes.length > 0) {
+              const subs: Subtitle[] = [];
+              for (let i = 0; i < textNodes.length; i++) {
+                const node = textNodes[i];
+                const start = parseFloat(node.getAttribute('start') || '0');
+                const dur = parseFloat(node.getAttribute('dur') || '3');
+                const content = decodeHtmlEntities(node.textContent || '').trim();
+                if (content && !/^\[.*\]$/.test(content)) {
+                  subs.push({
+                    id: subs.length + 1,
+                    start,
+                    end: Math.round((start + dur) * 10) / 10,
+                    text: content,
+                    translation: ''
+                  });
+                }
+              }
+              if (subs.length > 0) return subs;
+            }
+          }
+        }
+      }
+    } catch {}
+
+    return null;
+  };
+
+  // Subtitle Extraction logic (YouTube Captions / Gemini AI)
   const handleExtractSubtitles = async () => {
     if (!activeLesson) return;
     setIsExtractingSubs(true);
-    setExtractProgressText('Extraindo e sincronizando legendas do vídeo...');
+    setExtractProgressText('Captando legendas originais do YouTube...');
 
     const ytId = getYoutubeVideoId(activeLesson.videoUrl);
-    const geminiKey = localStorage.getItem('hl_gemini_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY;
 
     try {
-      // 1. Attempt AI-based transcription & chunk extraction if Gemini key present
+      // 1. Tentar captar a legenda real do YouTube caso exista
+      if (ytId) {
+        const ytSubs = await fetchYouTubeCaptions(ytId);
+        if (ytSubs && ytSubs.length > 0) {
+          const updatedLesson: Lesson = {
+            ...activeLesson,
+            subtitles: ytSubs
+          };
+          setActiveLesson(updatedLesson);
+          setCurrentSentenceIndex(0);
+          setIsExtractingSubs(false);
+          setIsUploadModalOpen(false);
+          // Persist in custom lessons
+          const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+          if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
+          setCustomLessons(updatedCustom);
+          try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+          alert(`Legendas do YouTube captadas com sucesso! (${ytSubs.length} frases sincronizadas)`);
+          return;
+        }
+      }
+
+      // 2. Attempt AI-based transcription & chunk extraction if Gemini key present
+      const geminiKey = localStorage.getItem('hl_gemini_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (geminiKey && geminiKey !== 'sua-chave-gemini-aqui') {
-        setExtractProgressText('Gerando transcrição e frases de escuta com IA...');
+        setExtractProgressText('Gerando frases de escuta com IA...');
         const prompt = `Generate a realistic English subtitle sequence with 4 to 8 short listening sentences for a video about "${activeLesson.title}". Return ONLY a JSON array of objects with format: [{"id": 1, "start": 0.0, "end": 4.5, "text": "sentence in english", "translation": "tradução em português"}]. No markdown formatting.`;
         
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
@@ -1111,20 +1234,25 @@ export const MediaStudy: React.FC = () => {
             setCurrentSentenceIndex(0);
             setIsExtractingSubs(false);
             setIsUploadModalOpen(false);
-            alert('Legendas extraídas e sincronizadas com sucesso!');
+            const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+            if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
+            setCustomLessons(updatedCustom);
+            try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+            alert('Legendas geradas com sucesso para escuta ativa!');
             return;
           }
         }
       }
 
-      // 2. Fallback heuristic sentences
+      // 3. Fallback heuristic sentences
       setTimeout(() => {
         const fallbackSubs: Subtitle[] = [
           { id: 1, start: 0.0, end: 5.0, text: 'people who are different', translation: 'pessoas que são diferentes' },
           { id: 2, start: 5.0, end: 10.0, text: 'should never feel like they do not belong', translation: 'nunca deveriam sentir que não pertencem' },
           { id: 3, start: 10.0, end: 16.0, text: 'today we will stand up and make our voices heard', translation: 'hoje nós vamos nos posicionar e fazer nossas vozes serem ouvidas' }
         ];
-        setActiveLesson({ ...activeLesson, subtitles: fallbackSubs });
+        const updatedLesson = { ...activeLesson, subtitles: fallbackSubs };
+        setActiveLesson(updatedLesson);
         setCurrentSentenceIndex(0);
         setIsExtractingSubs(false);
         setIsUploadModalOpen(false);
@@ -1134,11 +1262,11 @@ export const MediaStudy: React.FC = () => {
     } catch (err) {
       console.error('Subtitle extraction error:', err);
       setIsExtractingSubs(false);
-      alert('Não foi possível extrair legendas automaticamente. Faça o upload de um arquivo .SRT.');
+      alert('Não foi possível captar legendas automaticamente deste vídeo. Faça o upload de um arquivo .SRT.');
     }
   };
 
-  // Subtitle File Upload (.SRT / .VTT / .LRC / Text)
+  // Subtitle File Upload (.SRT / .VTT / .LRC / Text) - SEMPRE TEM PRIORIDADE MÁXIMA
   const handleSubtitleFileUpload = async (file: File) => {
     try {
       const text = await file.text();
@@ -1165,6 +1293,7 @@ export const MediaStudy: React.FC = () => {
       });
 
       if (subs.length > 0) {
+        // Prioridade máxima: Sobrescreve as legendas da lição atual com as legendas do arquivo do usuário
         const updated: Lesson = {
           ...activeLesson,
           subtitles: subs
@@ -1172,7 +1301,12 @@ export const MediaStudy: React.FC = () => {
         setActiveLesson(updated);
         setCurrentSentenceIndex(0);
         setIsUploadModalOpen(false);
-        alert(`${subs.length} frases importadas com sucesso!`);
+        // Persistir na lista de custom lessons
+        const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updated : l);
+        if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updated);
+        setCustomLessons(updatedCustom);
+        try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+        alert(`Prioridade aplicada: Legenda personalizada carregada (${subs.length} frases sincronizadas na tela)!`);
       } else {
         alert('Formato de legenda não reconhecido. Utilize arquivos .SRT ou cole as frases.');
       }
@@ -1181,7 +1315,7 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
-  // Manual Pasted Lines handler
+  // Manual Pasted Lines handler - Prioridade máxima sobre legendas automáticas
   const handleManualTranscriptSubmit = () => {
     const lines = manualTranscriptText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (!lines.length) return;
@@ -1194,14 +1328,19 @@ export const MediaStudy: React.FC = () => {
       translation: ''
     }));
 
-    setActiveLesson({
+    const updated: Lesson = {
       ...activeLesson,
       subtitles: subs
-    });
+    };
+    setActiveLesson(updated);
     setCurrentSentenceIndex(0);
     setIsUploadModalOpen(false);
     setManualTranscriptText('');
-    alert(`${subs.length} frases sincronizadas para treino!`);
+    const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updated : l);
+    if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updated);
+    setCustomLessons(updatedCustom);
+    try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+    alert(`Prioridade aplicada: ${subs.length} frases manuais sincronizadas na tela com o vídeo!`);
   };
 
   return (
@@ -2005,22 +2144,64 @@ export const MediaStudy: React.FC = () => {
                   fontSize: '0.85rem'
                 }}
               />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <button
+                  onClick={handleManualTranscriptSubmit}
+                  disabled={!manualTranscriptText.trim()}
+                  style={{
+                    backgroundColor: manualTranscriptText.trim() ? '#0284c7' : 'rgba(255, 255, 255, 0.05)',
+                    border: 'none',
+                    color: manualTranscriptText.trim() ? '#ffffff' : '#6b7280',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: manualTranscriptText.trim() ? 'pointer' : 'default'
+                  }}
+                >
+                  Sincronizar Frases Coladas (Prioridade Máxima)
+                </button>
+              </div>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)' }} />
+
+            {/* Captar Legenda do YouTube button */}
+            <div style={{
+              backgroundColor: 'rgba(56, 189, 248, 0.06)',
+              border: '1px solid rgba(56, 189, 248, 0.2)',
+              borderRadius: '8px',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#38bdf8' }}>
+                🎬 Captar Legenda do YouTube
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Caso você não adicione um arquivo ou frases manuais, o app capta e preenche a legenda original do YouTube automaticamente. Se você adicionar uma legenda personalizada, ela terá prioridade na sincronização.
+              </p>
               <button
-                onClick={handleManualTranscriptSubmit}
-                disabled={!manualTranscriptText.trim()}
+                onClick={handleExtractSubtitles}
+                disabled={isExtractingSubs}
                 style={{
-                  marginTop: '6px',
-                  backgroundColor: '#0284c7',
-                  border: 'none',
-                  color: '#ffffff',
+                  marginTop: '4px',
+                  backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid #38bdf8',
+                  color: '#38bdf8',
                   borderRadius: '6px',
-                  padding: '8px 16px',
+                  padding: '8px 14px',
                   fontSize: '0.82rem',
                   fontWeight: 700,
-                  cursor: 'pointer'
+                  cursor: isExtractingSubs ? 'default' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
               >
-                Sincronizar Frases Coladas
+                {isExtractingSubs ? extractProgressText || 'Captando...' : 'Captar Legenda do YouTube'}
               </button>
             </div>
           </div>

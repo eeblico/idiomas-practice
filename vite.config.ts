@@ -1,9 +1,52 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { YoutubeTranscript } from 'youtube-transcript';
+
+// Custom Vite plugin to serve YouTube transcript endpoint on localhost
+function youtubeTranscriptPlugin() {
+  return {
+    name: 'youtube-transcript-api',
+    configureServer(server: any) {
+      server.middlewares.use('/api/youtube-transcript', async (req: any, res: any) => {
+        try {
+          const url = new URL(req.url, `http://${req.headers.host}`);
+          const videoId = url.searchParams.get('videoId');
+          const lang = url.searchParams.get('lang') || 'en';
+
+          if (!videoId) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'videoId is required' }));
+            return;
+          }
+
+          let transcript: any[] = [];
+          try {
+            transcript = await YoutubeTranscript.fetchTranscript(videoId, { lang });
+          } catch (firstErr) {
+            // Fallback without language constraint
+            transcript = await YoutubeTranscript.fetchTranscript(videoId);
+          }
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: true, transcript }));
+        } catch (err: any) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: err?.message || 'Legenda do YouTube não disponível para este vídeo' 
+          }));
+        }
+      });
+    }
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), youtubeTranscriptPlugin()],
   build: {
     chunkSizeWarningLimit: 3500,
     rollupOptions: {
