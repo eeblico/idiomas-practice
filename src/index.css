@@ -198,37 +198,41 @@
   border-color: rgba(124, 58, 237, 0.2) !important;
 }
 
-/* Discreet scrollbars globally */
+/* Discreet dark scrollbars globally - cinza bem escuro para não distrair em players e páginas */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #0f1115;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: #1e222b;
   border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.3);
+  background: #2b313d;
 }
 
 /* Light Theme overrides for scrollbars */
+:root.light-theme ::-webkit-scrollbar-track {
+  background: #0f1115;
+}
 :root.light-theme ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: #1e222b;
 }
 :root.light-theme ::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.25);
+  background: #2b313d;
 }
 
 /* Firefox support */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: #1e222b #0f1115;
 }
 :root.light-theme * {
-  scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  scrollbar-color: #1e222b #0f1115;
 }
 
 /* Global Reset & Base Styles */

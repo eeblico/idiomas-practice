@@ -8,7 +8,7 @@ import {
   ChevronRight, ChevronLeft, Repeat, Volume2, Mic, Info, Star, Bookmark, Share2, 
   ArrowLeft, Download, RefreshCw, X, HelpCircle, Check, Sparkles, Menu,
   Copy, Plus, Maximize, Minimize, Eye, EyeOff, Expand, Shrink, Settings,
-  Search, FileText, Languages, Trash2
+  Search, FileText, Languages, Trash2, FastForward, Rewind
 } from 'lucide-react';
 
 // --- Data Models & Types ---
@@ -34,6 +34,9 @@ interface Lesson {
   description: string;
   videoUrl: string;
   subtitles: Subtitle[];
+  subtitleSource?: 'youtube_auto' | 'srt_file' | 'manual_text' | 'preloaded';
+  rawTranscriptText?: string;
+  portugueseRawText?: string;
 }
 
 // Pre-loaded Local Explanations Dictionary for Offline Demonstration
@@ -400,7 +403,31 @@ export const MediaStudy: React.FC = () => {
   const [showTranslation, setShowTranslation] = useState<boolean>(false);
   const [portugueseSubtitlesText, setPortugueseSubtitlesText] = useState<string>('');
 
-  // Sincronizar legendas/tradução em português inseridas nas configurações
+  // New Lesson modal states
+  const [isNewLessonModalOpen, setIsNewLessonModalOpen] = useState(false);
+  const [newLessonTitle, setNewLessonTitle] = useState('');
+  const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
+  const [newLessonEnglishText, setNewLessonEnglishText] = useState('');
+  const [newLessonPortugueseText, setNewLessonPortugueseText] = useState('');
+  const [newLessonEnglishFile, setNewLessonEnglishFile] = useState<File | null>(null);
+  const [newLessonPortugueseFile, setNewLessonPortugueseFile] = useState<File | null>(null);
+  const [isCreatingLesson, setIsCreatingLesson] = useState(false);
+
+  // Sync settings input and Portuguese text whenever active lesson changes
+  useEffect(() => {
+    if (activeLesson) {
+      setCustomVideoUrlInput(activeLesson.videoUrl || '');
+      if (activeLesson.portugueseRawText) {
+        setPortugueseSubtitlesText(activeLesson.portugueseRawText);
+      } else if (activeLesson.subtitles?.length) {
+        setPortugueseSubtitlesText(activeLesson.subtitles.map(s => s.translation).filter(Boolean).join('\n'));
+      } else {
+        setPortugueseSubtitlesText('');
+      }
+    }
+  }, [activeLesson?.id]);
+
+  // Sincronizar legendas/tradução em português inseridas nas configurações em texto
   const handleSavePortugueseSubtitles = () => {
     if (!activeLesson) return;
     const lines = portugueseSubtitlesText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -411,20 +438,112 @@ export const MediaStudy: React.FC = () => {
       translation: lines[idx] !== undefined ? lines[idx] : sub.translation
     }));
 
-    const updatedLesson = {
+    const updatedLesson: Lesson = {
       ...activeLesson,
-      subtitles: updatedSubs
+      subtitles: updatedSubs,
+      portugueseRawText: lines.join('\n')
     };
 
     setActiveLesson(updatedLesson);
-    // Persist in custom lessons
     const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+    if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
     setCustomLessons(updatedCustom);
     try {
       localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom));
     } catch {}
 
     alert(`Tradução em português de ${lines.length} frases sincronizada com sucesso!`);
+  };
+
+  // Upload de arquivo de legenda em português (.SRT / .VTT)
+  const handlePortugueseSrtUpload = async (file: File) => {
+    if (!activeLesson) return;
+    try {
+      const text = await file.text();
+      const blocks = text.trim().split(/\r?\n\r?\n/);
+      const ptLines: string[] = [];
+      blocks.forEach((block) => {
+        const lines = block.trim().split(/\r?\n/);
+        if (lines.length >= 2) {
+          const subText = lines.slice(2).join(' ').trim();
+          if (subText) ptLines.push(decodeHtmlEntities(subText));
+        }
+      });
+      if (ptLines.length === 0) {
+        ptLines.push(...text.split(/\r?\n/).map(l => l.trim()).filter(Boolean));
+      }
+
+      if (ptLines.length > 0) {
+        const updatedSubs = activeLesson.subtitles.map((sub, idx) => ({
+          ...sub,
+          translation: ptLines[idx] !== undefined ? ptLines[idx] : sub.translation
+        }));
+        const updatedLesson: Lesson = {
+          ...activeLesson,
+          subtitles: updatedSubs,
+          portugueseRawText: ptLines.join('\n')
+        };
+        setActiveLesson(updatedLesson);
+        setPortugueseSubtitlesText(ptLines.join('\n'));
+        const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+        if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
+        setCustomLessons(updatedCustom);
+        try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+        alert(`Arquivo de legenda em português (.SRT) sincronizado com sucesso (${ptLines.length} frases)!`);
+      } else {
+        alert('Nenhum texto de legenda encontrado no arquivo.');
+      }
+    } catch {
+      alert('Erro ao processar o arquivo de legenda em português.');
+    }
+  };
+
+  // Tradução automática sob demanda de todas as legendas da lição atual
+  const handleAutoTranslateCurrentLesson = async () => {
+    if (!activeLesson?.subtitles?.length) return;
+    try {
+      const translated = await autoTranslateSubtitles(
+        activeLesson.subtitles.map(s => ({ ...s, translation: '' }))
+      );
+      const ptText = translated.map(s => s.translation).filter(Boolean).join('\n');
+      const updatedLesson: Lesson = {
+        ...activeLesson,
+        subtitles: translated,
+        portugueseRawText: ptText
+      };
+      setActiveLesson(updatedLesson);
+      setPortugueseSubtitlesText(ptText);
+      const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+      if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
+      setCustomLessons(updatedCustom);
+      try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+      alert(`Tradução automática gerada para ${translated.length} frases!`);
+    } catch {
+      alert('Erro ao traduzir legendas automaticamente.');
+    }
+  };
+
+  // Toggle tradução com garantia de preenchimento automático se faltar tradução
+  const toggleTranslation = async () => {
+    const nextVal = !showTranslation;
+    setShowTranslation(nextVal);
+    if (nextVal && currentSub && (!currentSub.translation || !currentSub.translation.trim())) {
+      try {
+        const translatedSubs = await autoTranslateSubtitles(activeLesson.subtitles);
+        const updatedLesson: Lesson = {
+          ...activeLesson,
+          subtitles: translatedSubs,
+          portugueseRawText: translatedSubs.map(s => s.translation).filter(Boolean).join('\n')
+        };
+        setActiveLesson(updatedLesson);
+        const updatedCustom = customLessons.map(l => l.id === activeLesson.id ? updatedLesson : l);
+        if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
+        setCustomLessons(updatedCustom);
+        try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
+      } catch (err) {
+        console.warn('Auto translation error on toggle:', err);
+      }
+    }
   };
 
   // Delete current lesson handler (Excluir lição)
@@ -676,15 +795,34 @@ export const MediaStudy: React.FC = () => {
     playVideo();
   };
 
-  // Reveal all words (Action of the grey "Mostrar" button)
+  // Toggle reveal / hide words (Action of the grey "Mostrar" button: retira as palavras das lacunas para preencher novamente caso já estejam mostradas)
   const handleRevealSentence = () => {
     if (!sentenceWords.length) return;
-    const allSolved: Record<number, boolean> = {};
-    sentenceWords.forEach((_, idx) => {
-      allSolved[idx] = true;
-    });
-    setSolvedWordIndices(allSolved);
-    setShowAnswer(true);
+    if (showAnswer) {
+      // Já está mostrando: esconde novamente e limpa as lacunas para o usuário tentar preencher
+      setSolvedWordIndices({});
+      setUsedChipsIndices({});
+      setShowAnswer(false);
+      setActiveSlotIndex(0);
+      setCurrentInputWord('');
+      if (practiceMode === 'typing') {
+        setTimeout(() => slotInputRef.current?.focus(), 60);
+      }
+    } else {
+      // Mostra todas as palavras
+      const allSolved: Record<number, boolean> = {};
+      sentenceWords.forEach((_, idx) => {
+        allSolved[idx] = true;
+      });
+      setSolvedWordIndices(allSolved);
+      setShowAnswer(true);
+    }
+  };
+
+  // Seek relative backward/forward 5 seconds (Avançar e voltar 5 a 10s discretos)
+  const seekRelative = (deltaSeconds: number) => {
+    const target = Math.max(0, currentTime + deltaSeconds);
+    seekTo(target);
   };
 
   // Navigation chevrons (< and >)
@@ -1071,6 +1209,142 @@ export const MediaStudy: React.FC = () => {
     setIsUploadModalOpen(true);
   };
 
+  // Criar nova lição personalizada com suporte a links de vídeo (YouTube, Drive, Febbox), legendas em inglês (SRT ou texto) e legendas em português (SRT, texto ou tradução automática)
+  const handleCreateNewLesson = async () => {
+    if (!newLessonVideoUrl.trim()) {
+      alert('Por favor, informe o link do vídeo (YouTube, Google Drive, Febbox ou arquivo direto).');
+      return;
+    }
+    setIsCreatingLesson(true);
+
+    try {
+      let parsedSubs: Subtitle[] = [];
+      let subSource: 'youtube_auto' | 'srt_file' | 'manual_text' | 'preloaded' = 'manual_text';
+      let rawEng = '';
+
+      // 1. Legenda em inglês
+      if (newLessonEnglishFile) {
+        const text = await newLessonEnglishFile.text();
+        rawEng = text;
+        subSource = 'srt_file';
+        const blocks = text.trim().split(/\r?\n\r?\n/);
+        blocks.forEach((block, index) => {
+          const lines = block.trim().split(/\r?\n/);
+          if (lines.length >= 2) {
+            const timeMatch = lines[1]?.match(/(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)/);
+            if (timeMatch) {
+              const start = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+              const end = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+              const subText = lines.slice(2).join(' ');
+              parsedSubs.push({
+                id: index + 1,
+                start,
+                end,
+                text: decodeHtmlEntities(subText),
+                translation: ''
+              });
+            }
+          }
+        });
+      } else if (newLessonEnglishText.trim()) {
+        rawEng = newLessonEnglishText.trim();
+        subSource = 'manual_text';
+        const lines = newLessonEnglishText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        parsedSubs = lines.map((line, idx) => ({
+          id: idx + 1,
+          start: idx * 4.5,
+          end: (idx + 1) * 4.5,
+          text: decodeHtmlEntities(line),
+          translation: ''
+        }));
+      } else {
+        // Tentar captar do YouTube caso seja link do YouTube
+        const ytId = getYoutubeVideoId(newLessonVideoUrl.trim());
+        if (ytId) {
+          const ytCaptions = await fetchYouTubeCaptions(ytId);
+          if (ytCaptions && ytCaptions.length > 0) {
+            parsedSubs = ytCaptions;
+            subSource = 'youtube_auto';
+            rawEng = ytCaptions.map(s => s.text).join('\n');
+          }
+        }
+      }
+
+      if (parsedSubs.length === 0) {
+        parsedSubs = [
+          { id: 1, start: 0.0, end: 5.0, text: 'Practice listening with this video', translation: 'Pratique a escuta com este vídeo' }
+        ];
+      }
+
+      // 2. Legenda em português (tradução)
+      let rawPt = '';
+      let ptLines: string[] = [];
+      if (newLessonPortugueseFile) {
+        const ptText = await newLessonPortugueseFile.text();
+        rawPt = ptText;
+        const ptBlocks = ptText.trim().split(/\r?\n\r?\n/);
+        ptBlocks.forEach((block) => {
+          const lines = block.trim().split(/\r?\n/);
+          if (lines.length >= 2) {
+            const subText = lines.slice(2).join(' ').trim();
+            if (subText) ptLines.push(decodeHtmlEntities(subText));
+          }
+        });
+        if (ptLines.length === 0) {
+          ptLines = ptText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        }
+      } else if (newLessonPortugueseText.trim()) {
+        rawPt = newLessonPortugueseText.trim();
+        ptLines = newLessonPortugueseText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      }
+
+      if (ptLines.length > 0) {
+        parsedSubs = parsedSubs.map((s, idx) => ({
+          ...s,
+          translation: ptLines[idx] || s.translation
+        }));
+      } else {
+        // Auto-traduz caso o usuário não tenha inserido legenda em português
+        parsedSubs = await autoTranslateSubtitles(parsedSubs);
+        rawPt = parsedSubs.map(s => s.translation).join('\n');
+      }
+
+      const createdLesson: Lesson = {
+        id: `custom-lesson-${Date.now()}`,
+        title: newLessonTitle.trim() || `Nova Lição (${parsedSubs.length} frases)`,
+        description: `Lição personalizada (${parsedSubs.length} frases sincronizadas).`,
+        videoUrl: newLessonVideoUrl.trim(),
+        subtitles: parsedSubs,
+        subtitleSource: subSource,
+        rawTranscriptText: rawEng || parsedSubs.map(s => s.text).join('\n'),
+        portugueseRawText: rawPt || parsedSubs.map(s => s.translation).join('\n')
+      };
+
+      const updatedCustom = [...customLessons, createdLesson];
+      setCustomLessons(updatedCustom);
+      try {
+        localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom));
+      } catch {}
+
+      setActiveLesson(createdLesson);
+      setCurrentSentenceIndex(0);
+      setIsNewLessonModalOpen(false);
+      // Limpa os campos
+      setNewLessonTitle('');
+      setNewLessonVideoUrl('');
+      setNewLessonEnglishText('');
+      setNewLessonPortugueseText('');
+      setNewLessonEnglishFile(null);
+      setNewLessonPortugueseFile(null);
+      alert(`Nova lição "${createdLesson.title}" adicionada com sucesso!`);
+    } catch (err) {
+      console.error('Error creating lesson:', err);
+      alert('Erro ao criar lição. Verifique os dados fornecidos.');
+    } finally {
+      setIsCreatingLesson(false);
+    }
+  };
+
   // Search Bar / URL Input Handler
   const handleSearchOrUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1101,6 +1375,30 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
+  // Automatic translation helper (Traduz frases de legendas automaticamente para português)
+  const autoTranslateSubtitles = async (subs: Subtitle[]): Promise<Subtitle[]> => {
+    try {
+      const translated = await Promise.all(
+        subs.map(async (s) => {
+          if (s.translation && s.translation.trim().length > 0) return s;
+          try {
+            const cleanText = s.text.replace(/^[A-Za-z0-9\s'.-]{2,20}:\s*/, '').trim();
+            const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=pt&dt=t&q=${encodeURIComponent(cleanText)}`);
+            if (res.ok) {
+              const data = await res.json();
+              const ptText = data?.[0]?.map((part: any) => part[0]).join('') || '';
+              return { ...s, translation: ptText || s.translation };
+            }
+          } catch {}
+          return s;
+        })
+      );
+      return translated;
+    } catch {
+      return subs;
+    }
+  };
+
   // Subtitle Extraction logic (YouTube Captions / Gemini AI)
   // Fetch actual YouTube subtitles from the video
   const fetchYouTubeCaptions = async (videoId: string): Promise<Subtitle[] | null> => {
@@ -1125,7 +1423,11 @@ export const MediaStudy: React.FC = () => {
             })
             .filter((s: Subtitle) => s.text.length > 0 && !/^\[.*\]$/.test(s.text));
 
-          if (subs.length > 0) return subs;
+          if (subs.length > 0) {
+            // Auto translate the English sentences to Portuguese
+            const withTranslation = await autoTranslateSubtitles(subs);
+            return withTranslation;
+          }
         }
       }
     } catch (err) {
@@ -1167,7 +1469,7 @@ export const MediaStudy: React.FC = () => {
                   });
                 }
               }
-              if (subs.length > 0) return subs;
+              if (subs.length > 0) return await autoTranslateSubtitles(subs);
             }
           }
         }
@@ -1190,9 +1492,13 @@ export const MediaStudy: React.FC = () => {
       if (ytId) {
         const ytSubs = await fetchYouTubeCaptions(ytId);
         if (ytSubs && ytSubs.length > 0) {
+          const withTrans = await autoTranslateSubtitles(ytSubs);
           const updatedLesson: Lesson = {
             ...activeLesson,
-            subtitles: ytSubs
+            subtitles: withTrans,
+            subtitleSource: 'youtube_auto',
+            rawTranscriptText: withTrans.map(s => s.text).join('\n'),
+            portugueseRawText: withTrans.map(s => s.translation).filter(Boolean).join('\n')
           };
           setActiveLesson(updatedLesson);
           setCurrentSentenceIndex(0);
@@ -1203,7 +1509,7 @@ export const MediaStudy: React.FC = () => {
           if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updatedLesson);
           setCustomLessons(updatedCustom);
           try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
-          alert(`Legendas do YouTube captadas com sucesso! (${ytSubs.length} frases sincronizadas)`);
+          alert(`Legendas do YouTube captadas e traduzidas com sucesso! (${withTrans.length} frases sincronizadas)`);
           return;
         }
       }
@@ -1293,10 +1599,14 @@ export const MediaStudy: React.FC = () => {
       });
 
       if (subs.length > 0) {
+        // Traduz automaticamente caso ainda não possua tradução em português
+        const translatedSubs = await autoTranslateSubtitles(subs);
         // Prioridade máxima: Sobrescreve as legendas da lição atual com as legendas do arquivo do usuário
         const updated: Lesson = {
           ...activeLesson,
-          subtitles: subs
+          subtitles: translatedSubs,
+          subtitleSource: 'srt_file',
+          rawTranscriptText: text.slice(0, 500)
         };
         setActiveLesson(updated);
         setCurrentSentenceIndex(0);
@@ -1306,7 +1616,7 @@ export const MediaStudy: React.FC = () => {
         if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updated);
         setCustomLessons(updatedCustom);
         try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
-        alert(`Prioridade aplicada: Legenda personalizada carregada (${subs.length} frases sincronizadas na tela)!`);
+        alert(`Prioridade aplicada: Legenda personalizada carregada e traduzida (${subs.length} frases sincronizadas na tela)!`);
       } else {
         alert('Formato de legenda não reconhecido. Utilize arquivos .SRT ou cole as frases.');
       }
@@ -1316,7 +1626,7 @@ export const MediaStudy: React.FC = () => {
   };
 
   // Manual Pasted Lines handler - Prioridade máxima sobre legendas automáticas
-  const handleManualTranscriptSubmit = () => {
+  const handleManualTranscriptSubmit = async () => {
     const lines = manualTranscriptText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (!lines.length) return;
 
@@ -1328,9 +1638,14 @@ export const MediaStudy: React.FC = () => {
       translation: ''
     }));
 
+    // Traduz automaticamente as linhas fornecidas
+    const translatedSubs = await autoTranslateSubtitles(subs);
+
     const updated: Lesson = {
       ...activeLesson,
-      subtitles: subs
+      subtitles: translatedSubs,
+      subtitleSource: 'manual_text',
+      rawTranscriptText: lines.join('\n')
     };
     setActiveLesson(updated);
     setCurrentSentenceIndex(0);
@@ -1340,7 +1655,7 @@ export const MediaStudy: React.FC = () => {
     if (!updatedCustom.some(l => l.id === activeLesson.id)) updatedCustom.push(updated);
     setCustomLessons(updatedCustom);
     try { localStorage.setItem('hl_custom_lessons', JSON.stringify(updatedCustom)); } catch {}
-    alert(`Prioridade aplicada: ${subs.length} frases manuais sincronizadas na tela com o vídeo!`);
+    alert(`Prioridade aplicada: ${subs.length} frases manuais sincronizadas e traduzidas na tela com o vídeo!`);
   };
 
   return (
@@ -1454,7 +1769,7 @@ export const MediaStudy: React.FC = () => {
         }}>
           {/* Subtle icon buttons group */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* Discrete Lições Icon Button */}
+            {/* 1. Discrete Lições Icon Button */}
             <button
               onClick={() => setIsLessonsModalOpen(true)}
               style={{
@@ -1484,7 +1799,37 @@ export const MediaStudy: React.FC = () => {
               <Menu size={18} />
             </button>
 
-            {/* Discrete Settings Icon Button */}
+            {/* 2. Discrete Adicionar Nova Lição Icon Button (+) */}
+            <button
+              onClick={() => setIsNewLessonModalOpen(true)}
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#9ca3af',
+                borderRadius: '8px',
+                padding: '7px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#38bdf8';
+                e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#9ca3af';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+              }}
+              title="Adicionar Nova Lição"
+            >
+              <Plus size={18} />
+            </button>
+
+            {/* 3. Discrete Settings Icon Button */}
             <button
               onClick={() => setIsConfigDrawerOpen(true)}
               style={{
@@ -1509,7 +1854,7 @@ export const MediaStudy: React.FC = () => {
                 e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
                 e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
               }}
-              title="Configurações (Link do vídeo, Modo de exercício, Legendas em português, Excluir lição)"
+              title="Configurações (Características, Legendas, Vídeo, Excluir lição)"
             >
               <Settings size={18} />
             </button>
@@ -1538,12 +1883,12 @@ export const MediaStudy: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. TRAINING CONTROLS BAR: (i) Info | [ Play Áudio Sistema ] | [ Repetir Vídeo ] | [ Mostrar ] | [ 🎙️ Mic ] */}
+      {/* 3. TRAINING CONTROLS BAR: (i) Info | [ -5s ] | [ Play/Pausa Frase ] | [ Ouvir Frase ] | [ +5s ] | [ Repetir ] | [ Mostrar ] | [ 👁️ Tradução ] | [ 🎙️ Mic ] */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '16px',
+        gap: '12px',
         padding: '6px 0',
         width: '100%',
         flexWrap: 'wrap'
@@ -1568,67 +1913,116 @@ export const MediaStudy: React.FC = () => {
           <Info size={20} />
         </button>
 
-        {/* Playback Mode Toggle: Modo Contínuo vs Pausa a cada frase */}
+        {/* Rewind 5s Button (Voltar 5 segundos) */}
+        <button
+          onClick={() => seekRelative(-5)}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#9ca3af',
+            borderRadius: '8px',
+            padding: '8px 10px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#ffffff';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#9ca3af';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          }}
+          title="Voltar 5 segundos"
+        >
+          <Rewind size={18} />
+        </button>
+
+        {/* Playback Mode Toggle: Modo Contínuo vs Pausa a cada frase (Apenas ícone não colorido, sem texto) */}
         <button
           onClick={() => setIsContinuousPlay(prev => !prev)}
           style={{
-            backgroundColor: isContinuousPlay ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-            border: isContinuousPlay ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
-            color: isContinuousPlay ? '#38bdf8' : '#9ca3af',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#9ca3af',
             borderRadius: '8px',
-            padding: '8px 12px',
-            fontSize: '0.84rem',
-            fontWeight: 600,
+            padding: '8px 10px',
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
+            justifyContent: 'center',
             transition: 'all 0.2s'
           }}
-          title={isContinuousPlay ? 'Modo Contínuo ativado (reprodução segue direto). Clique para pausar a cada frase' : 'Modo Pausa por Frase ativado (o vídeo pausa a cada sentença para você completar). Clique para modo contínuo'}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#ffffff';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#9ca3af';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          }}
+          title={isContinuousPlay ? 'Modo Contínuo ativado (Clique para pausar a cada frase)' : 'Modo Pausa por Frase ativado (Clique para modo contínuo)'}
         >
-          {isContinuousPlay ? (
-            <>
-              <Play size={15} fill="#38bdf8" />
-              <span>Contínuo</span>
-            </>
-          ) : (
-            <>
-              <Pause size={15} />
-              <span>Pausar por Frase</span>
-            </>
-          )}
+          {isContinuousPlay ? <Play size={18} /> : <Pause size={18} />}
         </button>
 
-        {/* Play System Audio Button (Ouvir frase gerada pelo áudio do sistema) */}
+        {/* Play System Audio Button (Ouvir frase gerada pelo áudio do sistema - Apenas ícone não colorido, sem texto) */}
         <button
           onClick={playSystemTtsSentence}
           style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
-            color: '#38bdf8',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#9ca3af',
             borderRadius: '8px',
-            padding: '9px 18px',
-            fontSize: '0.92rem',
-            fontWeight: 600,
+            padding: '8px 10px',
             cursor: 'pointer',
-            transition: 'all 0.15s ease',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px'
+            justifyContent: 'center',
+            transition: 'all 0.2s'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
-            e.currentTarget.style.borderColor = '#38bdf8';
+            e.currentTarget.style.color = '#ffffff';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.18)';
+            e.currentTarget.style.color = '#9ca3af';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
           }}
           title="Ouvir a frase pelo áudio do sistema"
         >
           <Volume2 size={18} />
-          <span>Ouvir Frase</span>
+        </button>
+
+        {/* FastForward 5s Button (Avançar 5 segundos) */}
+        <button
+          onClick={() => seekRelative(5)}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#9ca3af',
+            borderRadius: '8px',
+            padding: '8px 10px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#ffffff';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#9ca3af';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          }}
+          title="Avançar 5 segundos"
+        >
+          <FastForward size={18} />
         </button>
 
         {/* Blue Repetir Button (Áudio do vídeo - Ação principal: início ao fim da vocalização) */}
@@ -1676,14 +2070,14 @@ export const MediaStudy: React.FC = () => {
           }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2b313d'}
-          title="Revelar frase e respostas (Atalho: Shift+Tab ou Alt+M)"
+          title="Revelar respostas ou limpar para preencher de novo (Atalho: Shift+Tab ou Alt+M)"
         >
           Mostrar
         </button>
 
         {/* Discrete Translation Toggle Eye Icon Button (Ícone de olho discreto para tradução) */}
         <button
-          onClick={() => setShowTranslation(prev => !prev)}
+          onClick={toggleTranslation}
           style={{
             backgroundColor: showTranslation ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.05)',
             border: showTranslation ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
@@ -1996,41 +2390,74 @@ export const MediaStudy: React.FC = () => {
         </span>
       </div>
 
-      {/* 5. MODAL: Material / Lessons Catalog Switcher */}
+      {/* 5. SIDEBAR DRAWER: Material / Lessons Catalog Switcher */}
       {isLessonsModalOpen && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 1000,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 1100,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
+          justifyContent: 'flex-end',
+          animation: 'fadeIn 0.2s ease'
         }}>
           <div style={{
-            backgroundColor: '#1a1e27',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '12px',
-            maxWidth: '560px',
             width: '100%',
-            padding: '24px',
+            maxWidth: '420px',
+            height: '100%',
+            backgroundColor: '#161922',
+            borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+            boxShadow: '-8px 0 28px rgba(0, 0, 0, 0.7)',
+            padding: '24px 20px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
-            maxHeight: '80vh',
             overflowY: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>📚 Materiais de Treino</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Menu size={20} color="#38bdf8" />
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Lições e Materiais</h3>
+              </div>
               <button 
                 onClick={() => setIsLessonsModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
               >
-                <X size={20} />
+                <X size={22} />
               </button>
             </div>
+
+            {/* Nova Lição Quick Action inside Drawer */}
+            <button
+              onClick={() => {
+                setIsLessonsModalOpen(false);
+                setIsNewLessonModalOpen(true);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid #38bdf8',
+                color: '#38bdf8',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                fontSize: '0.86rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.2)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.12)'}
+            >
+              <Plus size={16} />
+              <span>Adicionar Nova Lição</span>
+            </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {allLessons.map(lesson => (
@@ -2059,9 +2486,14 @@ export const MediaStudy: React.FC = () => {
                   <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}>
                     {lesson.description}
                   </p>
-                  <span style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '2px' }}>
-                    {lesson.subtitles.length} frases sincronizadas
-                  </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#38bdf8' }}>
+                      {lesson.subtitles.length} frases sincronizadas
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: '#9ca3af', backgroundColor: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px' }}>
+                      {lesson.videoUrl.includes('youtube') ? 'YouTube' : isGoogleDriveUrl(lesson.videoUrl) ? 'Drive' : isFebboxUrl(lesson.videoUrl) ? 'Febbox' : 'MP4'}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -2256,6 +2688,118 @@ export const MediaStudy: React.FC = () => {
               </button>
             </div>
 
+            {/* Section 0: Características Salvas da Lição */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38bdf8' }}>
+                📋 Características Salvas da Lição
+              </span>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.82rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                  <span style={{ color: '#9ca3af' }}>Título:</span>
+                  <strong style={{ color: '#ffffff', textAlign: 'right', maxWidth: '240px', wordBreak: 'break-word' }}>{activeLesson.title}</strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                  <span style={{ color: '#9ca3af' }}>Tipo de Mídia:</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    color: '#38bdf8',
+                    fontSize: '0.74rem',
+                    fontWeight: 600
+                  }}>
+                    {activeLesson.videoUrl.includes('youtube') || activeLesson.videoUrl.includes('youtu.be') ? '🎬 YouTube'
+                      : isGoogleDriveUrl(activeLesson.videoUrl) ? '📁 Google Drive'
+                      : isFebboxUrl(activeLesson.videoUrl) ? '☁️ Febbox Cloud'
+                      : '🎥 Vídeo Direto (MP4)'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                  <span style={{ color: '#9ca3af' }}>Legenda Logada:</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    color: '#34d399',
+                    fontSize: '0.74rem',
+                    fontWeight: 600
+                  }}>
+                    {activeLesson.subtitleSource === 'srt_file' ? '📁 Arquivo .SRT'
+                      : activeLesson.subtitleSource === 'manual_text' ? '✏️ Texto Manual'
+                      : activeLesson.subtitleSource === 'youtube_auto' ? '🎬 Captada do YouTube'
+                      : '✨ Predefinida / Integrada'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+                  <span style={{ color: '#9ca3af' }}>Frases Sincronizadas:</span>
+                  <strong style={{ color: '#ffffff' }}>{activeLesson.subtitles.length} frases</strong>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                  <span style={{ color: '#9ca3af' }}>Link Salvo do Vídeo:</span>
+                  <span style={{
+                    color: '#60a5fa',
+                    fontSize: '0.76rem',
+                    wordBreak: 'break-all',
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.06)'
+                  }}>
+                    {activeLesson.videoUrl}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                  <span style={{ color: '#9ca3af' }}>Texto da Legenda Salvo (Inglês):</span>
+                  <div style={{
+                    maxHeight: '80px',
+                    overflowY: 'auto',
+                    fontSize: '0.75rem',
+                    color: '#d1d5db',
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    lineHeight: 1.4,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {activeLesson.rawTranscriptText || activeLesson.subtitles.map(s => s.text).join('\n')}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                  <span style={{ color: '#9ca3af' }}>Texto da Tradução Salvo (Português):</span>
+                  <div style={{
+                    maxHeight: '80px',
+                    overflowY: 'auto',
+                    fontSize: '0.75rem',
+                    color: '#a7f3d0',
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    lineHeight: 1.4,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {activeLesson.portugueseRawText || activeLesson.subtitles.map(s => s.translation).filter(Boolean).join('\n') || 'Tradução automática ativada sob demanda.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Section 1: Link Direto do Vídeo */}
             <div style={{
               backgroundColor: 'rgba(255, 255, 255, 0.04)',
@@ -2267,7 +2811,7 @@ export const MediaStudy: React.FC = () => {
               gap: '10px'
             }}>
               <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
-                🔗 Carregar Link Exato do Vídeo
+                🔗 Carregar / Alterar Link do Vídeo
               </span>
               <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
                 Insira o link direto do YouTube, Google Drive ou Febbox (ex: febbox.com/share/...):
@@ -2394,7 +2938,7 @@ export const MediaStudy: React.FC = () => {
               </label>
             </div>
 
-            {/* Section 3: Legendas em Português & Arquivos */}
+            {/* Section 3: Legendas em Português & Arquivos SRT */}
             <div style={{
               backgroundColor: 'rgba(255, 255, 255, 0.04)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -2408,7 +2952,7 @@ export const MediaStudy: React.FC = () => {
                 🇧🇷 Legendas e Tradução em Português
               </span>
               <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
-                Insira as traduções frase por frase (uma por linha) para sincronizar com as legendas do vídeo:
+                Insira as traduções frase por frase (uma por linha), envie um arquivo .SRT em português ou gere a tradução automaticamente:
               </p>
               <textarea
                 rows={4}
@@ -2427,29 +2971,78 @@ export const MediaStudy: React.FC = () => {
                   resize: 'vertical'
                 }}
               />
-              <button
-                onClick={handleSavePortugueseSubtitles}
-                disabled={!portugueseSubtitlesText.trim()}
-                style={{
-                  backgroundColor: portugueseSubtitlesText.trim() ? '#10b981' : 'rgba(255, 255, 255, 0.05)',
-                  border: 'none',
-                  color: portugueseSubtitlesText.trim() ? '#ffffff' : '#6b7280',
-                  borderRadius: '6px',
-                  padding: '8px 14px',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  cursor: portugueseSubtitlesText.trim() ? 'pointer' : 'default',
-                  transition: 'background 0.2s'
-                }}
-              >
-                Salvar Tradução em Português
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={handleSavePortugueseSubtitles}
+                  disabled={!portugueseSubtitlesText.trim()}
+                  style={{
+                    flex: 1,
+                    backgroundColor: portugueseSubtitlesText.trim() ? '#10b981' : 'rgba(255, 255, 255, 0.05)',
+                    border: 'none',
+                    color: portugueseSubtitlesText.trim() ? '#ffffff' : '#6b7280',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: portugueseSubtitlesText.trim() ? 'pointer' : 'default',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  Salvar Tradução em Texto
+                </button>
+
+                <button
+                  onClick={handleAutoTranslateCurrentLesson}
+                  style={{
+                    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid #38bdf8',
+                    color: '#38bdf8',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  title="Traduzir todas as frases da lição automaticamente com Google Translate"
+                >
+                  ⚡ Traduzir com IA
+                </button>
+              </div>
 
               <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '4px 0' }} />
 
               <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#d1d5db' }}>
-                📁 Arquivos de Legenda (.SRT)
+                📁 Enviar Legenda em Português (.SRT / .VTT):
               </span>
+              <input
+                type="file"
+                accept=".srt,.vtt,.lrc"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handlePortugueseSrtUpload(e.target.files[0]);
+                  }
+                }}
+                style={{ fontSize: '0.8rem', color: '#9ca3af' }}
+              />
+            </div>
+
+            {/* Section 4: Legendas em Inglês (.SRT / Arquivo) */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#e5e7eb' }}>
+                📁 Legendas em Inglês (.SRT / YouTube)
+              </span>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.4 }}>
+                Envie um novo arquivo .SRT ou capte as legendas originais do vídeo:
+              </p>
               <button
                 onClick={() => {
                   setIsConfigDrawerOpen(false);
@@ -2460,7 +3053,7 @@ export const MediaStudy: React.FC = () => {
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                   color: '#ffffff',
                   borderRadius: '6px',
-                  padding: '8px 12px',
+                  padding: '9px 12px',
                   fontSize: '0.84rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -2471,11 +3064,11 @@ export const MediaStudy: React.FC = () => {
                 }}
               >
                 <Upload size={15} />
-                <span>Enviar Arquivo .SRT / .VTT</span>
+                <span>Gerenciar Legendas (.SRT / Texto / YouTube)</span>
               </button>
             </div>
 
-            {/* Section 4: Excluir Lição Atual */}
+            {/* Section 5: Excluir Lição Atual */}
             <div style={{
               backgroundColor: 'rgba(239, 68, 68, 0.06)',
               border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -2522,6 +3115,214 @@ export const MediaStudy: React.FC = () => {
                 <span>Excluir Esta Lição</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. MODAL: Adicionar Nova Lição */}
+      {isNewLessonModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 1200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#161922',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            borderRadius: '14px',
+            maxWidth: '560px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Plus size={22} color="#38bdf8" />
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Adicionar Nova Lição</h3>
+              </div>
+              <button
+                onClick={() => setIsNewLessonModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.4 }}>
+              Cadastre um novo vídeo e suas legendas. Suporta links do <strong>YouTube</strong>, <strong>Google Drive</strong>, <strong>Febbox</strong> ou arquivos diretos MP4.
+            </p>
+
+            {/* Título da Lição */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e5e7eb' }}>
+                📌 Título da Lição (Opcional):
+              </label>
+              <input
+                type="text"
+                value={newLessonTitle}
+                onChange={(e) => setNewLessonTitle(e.target.value)}
+                placeholder="Ex: Entrevista Naturalizer / Cena Malcolm"
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  padding: '9px 12px',
+                  fontSize: '0.84rem'
+                }}
+              />
+            </div>
+
+            {/* Link do Vídeo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e5e7eb' }}>
+                🔗 Link do Vídeo (Obrigatório):
+              </label>
+              <input
+                type="text"
+                value={newLessonVideoUrl}
+                onChange={(e) => setNewLessonVideoUrl(e.target.value)}
+                placeholder="https://www.youtube.com/... ou https://www.febbox.com/share/... ou Drive"
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  padding: '9px 12px',
+                  fontSize: '0.84rem'
+                }}
+              />
+            </div>
+
+            {/* Legenda em Inglês (Opcional: SRT ou Texto) */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#38bdf8' }}>
+                🇬🇧 Legenda em Inglês (Opcional - Arquivo .SRT ou Texto)
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>Arquivo .SRT / .VTT:</span>
+                <input
+                  type="file"
+                  accept=".srt,.vtt,.lrc"
+                  onChange={(e) => setNewLessonEnglishFile(e.target.files?.[0] || null)}
+                  style={{ fontSize: '0.8rem', color: '#9ca3af' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>Ou cole o texto linha por linha:</span>
+                <textarea
+                  rows={2}
+                  value={newLessonEnglishText}
+                  onChange={(e) => setNewLessonEnglishText(e.target.value)}
+                  placeholder="people who are different&#10;should never feel like they do not belong"
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '6px',
+                    color: '#ffffff',
+                    padding: '8px',
+                    fontSize: '0.82rem'
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                * Se não fornecer legenda para links do YouTube, o app tentará captar automaticamente.
+              </span>
+            </div>
+
+            {/* Legenda em Português / Tradução (Opcional: SRT ou Texto) */}
+            <div style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#10b981' }}>
+                🇧🇷 Tradução em Português (Opcional - Arquivo .SRT ou Texto)
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>Arquivo .SRT em português:</span>
+                <input
+                  type="file"
+                  accept=".srt,.vtt,.lrc"
+                  onChange={(e) => setNewLessonPortugueseFile(e.target.files?.[0] || null)}
+                  style={{ fontSize: '0.8rem', color: '#9ca3af' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>Ou cole as traduções linha por linha:</span>
+                <textarea
+                  rows={2}
+                  value={newLessonPortugueseText}
+                  onChange={(e) => setNewLessonPortugueseText(e.target.value)}
+                  placeholder="pessoas que são diferentes&#10;nunca deveriam sentir que não pertencem"
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: '6px',
+                    color: '#ffffff',
+                    padding: '8px',
+                    fontSize: '0.82rem'
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                * Se deixar em branco, o sistema traduzirá as frases para o português automaticamente!
+              </span>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              onClick={handleCreateNewLesson}
+              disabled={isCreatingLesson || !newLessonVideoUrl.trim()}
+              style={{
+                backgroundColor: newLessonVideoUrl.trim() ? '#0284c7' : 'rgba(255, 255, 255, 0.08)',
+                color: newLessonVideoUrl.trim() ? '#ffffff' : '#6b7280',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px 20px',
+                fontSize: '0.92rem',
+                fontWeight: 700,
+                cursor: newLessonVideoUrl.trim() && !isCreatingLesson ? 'pointer' : 'default',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '6px'
+              }}
+            >
+              <Plus size={18} />
+              <span>{isCreatingLesson ? 'Processando e Traduzindo...' : 'Criar Lição e Começar'}</span>
+            </button>
           </div>
         </div>
       )}
