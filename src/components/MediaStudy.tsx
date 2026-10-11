@@ -1083,118 +1083,90 @@ export const MediaStudy: React.FC = () => {
       width: '100%'
     }}>
 
-      {/* 1. TOP BAR: Minimalist header with Lições button and hidden Settings cog for video URL & mode */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        maxWidth: '720px',
-        margin: '0 auto',
-        padding: '2px 4px'
-      }}>
-        {/* Lições Button */}
-        <button
-          onClick={() => setIsLessonsModalOpen(true)}
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#d1d5db',
-            borderRadius: '8px',
-            padding: '7px 14px',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'background 0.2s'
-          }}
-          title="Ver lições e materiais disponíveis"
-        >
-          <Menu size={16} />
-          <span>Lições</span>
-        </button>
-
-        {/* Video Title in subtle styling */}
-        <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '380px', textAlign: 'center' }}>
-          {activeLesson?.title || 'Shadowing Practice'}
-        </span>
-
-        {/* Hidden Configuration Trigger Button (Opens Settings sidebar at right) */}
-        <button
-          onClick={() => setIsConfigDrawerOpen(true)}
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#9ca3af',
-            borderRadius: '8px',
-            padding: '7px 12px',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#38bdf8';
-            e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#9ca3af';
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-          }}
-          title="Configurações (Link do vídeo, Modo de exercício, Legendas)"
-        >
-          <Settings size={17} />
-          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Configurações</span>
-        </button>
-      </div>
-
-      {/* 2. CENTER STAGE: Navigation Chevrons (< and >) with 16:9 Video Player */}
+      {/* 2. CENTER STAGE: Enlarged 16:9 Video Player flanked by Lições & Settings + Navigation Chevrons */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '14px',
+        gap: '12px',
         width: '100%',
-        maxWidth: '920px',
+        maxWidth: '1060px',
         margin: '0 auto',
         position: 'relative'
       }}>
-        {/* Left Chevron (<) Button */}
-        <button
-          onClick={handlePrevSentence}
-          disabled={currentSentenceIndex <= 0}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: currentSentenceIndex > 0 ? '#9ca3af' : 'rgba(255,255,255,0.15)',
-            cursor: currentSentenceIndex > 0 ? 'pointer' : 'default',
-            padding: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.2s',
-            userSelect: 'none'
-          }}
-          title="Frase anterior"
-        >
-          <ChevronLeft size={42} strokeWidth={1.75} />
-        </button>
+        {/* Left Side Controls Column: Lições button + Left Chevron (<) */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          {/* Lições Button */}
+          <button
+            onClick={() => setIsLessonsModalOpen(true)}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#d1d5db',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'background 0.2s',
+              minWidth: '54px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
+              e.currentTarget.style.color = '#38bdf8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.color = '#d1d5db';
+            }}
+            title="Ver lições e materiais disponíveis"
+          >
+            <Menu size={18} />
+            <span style={{ fontSize: '0.72rem' }}>Lições</span>
+          </button>
 
-        {/* Video Player Card */}
+          {/* Left Chevron (<) Button */}
+          <button
+            onClick={handlePrevSentence}
+            disabled={currentSentenceIndex <= 0}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: currentSentenceIndex > 0 ? '#9ca3af' : 'rgba(255,255,255,0.15)',
+              cursor: currentSentenceIndex > 0 ? 'pointer' : 'default',
+              padding: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'color 0.2s',
+              userSelect: 'none'
+            }}
+            title="Frase anterior"
+          >
+            <ChevronLeft size={44} strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Video Player Card (Expanded space with maxWidth 840px) */}
         <div style={{
           flex: 1,
-          maxWidth: '720px',
+          maxWidth: '860px',
           width: '100%',
           aspectRatio: '16/9',
-          borderRadius: '8px',
+          borderRadius: '10px',
           overflow: 'hidden',
           backgroundColor: '#000000',
-          boxShadow: '0 12px 35px rgba(0, 0, 0, 0.8)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 14px 40px rgba(0, 0, 0, 0.85)',
+          border: '1px solid rgba(255, 255, 255, 0.16)',
           position: 'relative'
         }}>
           {activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be') ? (
@@ -1222,26 +1194,68 @@ export const MediaStudy: React.FC = () => {
           )}
         </div>
 
-        {/* Right Chevron (>) Button */}
-        <button
-          onClick={handleNextSentence}
-          disabled={currentSentenceIndex >= adjustedSubtitles.length - 1}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: currentSentenceIndex < adjustedSubtitles.length - 1 ? '#9ca3af' : 'rgba(255,255,255,0.15)',
-            cursor: currentSentenceIndex < adjustedSubtitles.length - 1 ? 'pointer' : 'default',
-            padding: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.2s',
-            userSelect: 'none'
-          }}
-          title="Próxima frase"
-        >
-          <ChevronRight size={42} strokeWidth={1.75} />
-        </button>
+        {/* Right Side Controls Column: Settings button + Right Chevron (>) */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          {/* Settings Trigger Button */}
+          <button
+            onClick={() => setIsConfigDrawerOpen(true)}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#9ca3af',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.2s',
+              minWidth: '54px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#38bdf8';
+              e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+              e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#9ca3af';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+            }}
+            title="Configurações (Link do vídeo, Modo de treino, Legendas)"
+          >
+            <Settings size={18} />
+            <span style={{ fontSize: '0.70rem', fontWeight: 600 }}>Ajustes</span>
+          </button>
+
+          {/* Right Chevron (>) Button */}
+          <button
+            onClick={handleNextSentence}
+            disabled={currentSentenceIndex >= adjustedSubtitles.length - 1}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: currentSentenceIndex < adjustedSubtitles.length - 1 ? '#9ca3af' : 'rgba(255,255,255,0.15)',
+              cursor: currentSentenceIndex < adjustedSubtitles.length - 1 ? 'pointer' : 'default',
+              padding: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'color 0.2s',
+              userSelect: 'none'
+            }}
+            title="Próxima frase"
+          >
+            <ChevronRight size={44} strokeWidth={1.8} />
+          </button>
+        </div>
       </div>
 
       {/* 3. TRAINING CONTROLS BAR: (i) Info | [ Play Áudio Sistema ] | [ Repetir Vídeo ] | [ Mostrar ] | [ 🎙️ Mic ] */}
@@ -1537,21 +1551,19 @@ export const MediaStudy: React.FC = () => {
           })}
         </div>
 
-        {/* Word Bank Chips (Aparece no modo 'chips' para organizar, ou modo 'typing' como apoio) */}
-        {!showAnswer && (
+        {/* Word Bank Chips (Aparece SOMENTE no modo 'chips' para organizar a frase com cliques) */}
+        {!showAnswer && practiceMode === 'chips' && (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             gap: '8px',
-            marginTop: '6px',
+            marginTop: '8px',
             width: '100%'
           }}>
-            {practiceMode === 'chips' && (
-              <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500 }}>
-                👉 Clique nas palavras abaixo para montar a frase na ordem correta:
-              </span>
-            )}
+            <span style={{ fontSize: '0.82rem', color: '#9ca3af', fontWeight: 500 }}>
+              👉 Clique nas palavras abaixo para montar a frase na ordem correta:
+            </span>
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
@@ -1714,35 +1726,6 @@ export const MediaStudy: React.FC = () => {
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#9ca3af', lineHeight: 1.4 }}>
               Vídeo ativo: <strong style={{ color: '#ffffff' }}>{activeLesson.title}</strong>
             </p>
-
-            {/* AI Auto-extract Button */}
-            <button
-              onClick={handleExtractSubtitles}
-              disabled={isExtractingSubs}
-              style={{
-                backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                border: '1px solid #38bdf8',
-                color: '#38bdf8',
-                borderRadius: '8px',
-                padding: '12px',
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                cursor: isExtractingSubs ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <Sparkles size={16} />
-              <span>{isExtractingSubs ? extractProgressText : '✨ Extrair Legendas com Inteligência Artificial'}</span>
-            </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
-              <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>OU</span>
-              <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
-            </div>
 
             {/* File Upload .SRT */}
             <div>

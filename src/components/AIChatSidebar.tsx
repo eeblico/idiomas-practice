@@ -1322,21 +1322,23 @@ Regras:
         }
       `}} />
 
-      {/* Floating Action Button */}
-      <button 
-        className="chat-fab" 
-        onClick={() => setIsOpen(prev => !prev)}
-        style={{
-          background: isOpen 
-            ? 'var(--bg-secondary)' 
-            : 'linear-gradient(135deg, var(--accent) 0%, hsl(280, 85%, 60%) 100%)',
-          color: isOpen ? 'var(--text-secondary)' : 'white',
-          border: isOpen ? '1px solid var(--border)' : 'none'
-        }}
-        title="Assistente de Chat IA"
-      >
-        {isOpen ? <X size={24} /> : <Sparkles size={24} />}
-      </button>
+      {/* Floating Action Button (Oculto na aba Shadowing / media conforme solicitado) */}
+      {activeTab !== 'media' && (
+        <button 
+          className="chat-fab" 
+          onClick={() => setIsOpen(prev => !prev)}
+          style={{
+            background: isOpen 
+              ? 'var(--bg-secondary)' 
+              : 'linear-gradient(135deg, var(--accent) 0%, hsl(280, 85%, 60%) 100%)',
+            color: isOpen ? 'var(--text-secondary)' : 'white',
+            border: isOpen ? '1px solid var(--border)' : 'none'
+          }}
+          title="Assistente de Chat IA"
+        >
+          {isOpen ? <X size={24} /> : <Sparkles size={24} />}
+        </button>
+      )}
 
       {/* Backdrop overlay (Mobile only) */}
       <div 
