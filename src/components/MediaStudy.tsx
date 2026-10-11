@@ -382,6 +382,8 @@ export const MediaStudy: React.FC = () => {
   const [currentInputWord, setCurrentInputWord] = useState<string>('');
   const [showAnswer, setShowAnswer] = useState<boolean>(false);
   const [isLoopingCurrent, setIsLoopingCurrent] = useState<boolean>(false);
+  // Continuous playback mode: if false (default), pauses automatically at the end of each sentence; if true, plays continuously
+  const [isContinuousPlay, setIsContinuousPlay] = useState<boolean>(false);
 
   // Synced playback states
   const [currentTime, setCurrentTime] = useState(0);
@@ -394,7 +396,7 @@ export const MediaStudy: React.FC = () => {
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
   const [customVideoUrlInput, setCustomVideoUrlInput] = useState('');
   const [usedChipsIndices, setUsedChipsIndices] = useState<Record<number, boolean>>({});
-  // Translation visibility & Portuguese subtitles state
+  // Translation visibility & Portuguese subtitles state (toggled via discreet Eye icon)
   const [showTranslation, setShowTranslation] = useState<boolean>(false);
   const [portugueseSubtitlesText, setPortugueseSubtitlesText] = useState<string>('');
 
@@ -526,6 +528,42 @@ export const MediaStudy: React.FC = () => {
     }
   }, [currentSentenceIndex, activeLesson?.id, practiceMode]);
 
+  // Global Keyboard Shortcuts (Atalhos do Teclado)
+  // Tab = Repetir áudio da frase do vídeo
+  // Alt+M / Shift+Tab / Ctrl+Space = Mostrar respostas
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing inside textareas or normal inputs outside the gap slot
+      const target = e.target as HTMLElement | null;
+      const isInsideSlot = target === slotInputRef.current;
+      const isOtherInput = target && (target.tagName === 'TEXTAREA' || (target.tagName === 'INPUT' && !isInsideSlot));
+
+      if (isOtherInput) return;
+
+      // Tab -> Repetir áudio do vídeo
+      if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault();
+        handleReplaySentence();
+        return;
+      }
+
+      // Shift+Tab or Alt+M or Ctrl+Space or F2 -> Mostrar frase completa
+      if (
+        (e.key === 'Tab' && e.shiftKey) || 
+        ((e.key === 'm' || e.key === 'M') && e.altKey) || 
+        (e.code === 'Space' && e.ctrlKey) ||
+        e.key === 'F2'
+      ) {
+        e.preventDefault();
+        handleRevealSentence();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentSub, sentenceWords, isPlaying]);
+
   // Helper to extract YouTube Video ID
   const getYoutubeVideoId = (url: string): string | null => {
     try {
@@ -586,15 +624,31 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
+  const pauseVideo = () => {
+    if (youtubePlayer && youtubePlayerReady) {
+      try { youtubePlayer.pauseVideo(); } catch {}
+    }
+    if (videoPlayerRef.current) {
+      try { videoPlayerRef.current.pause(); } catch {}
+    }
+    setIsPlaying(false);
+  };
+
+  const playVideo = () => {
+    if (youtubePlayer && youtubePlayerReady) {
+      try { youtubePlayer.playVideo(); } catch {}
+    }
+    if (videoPlayerRef.current) {
+      try { videoPlayerRef.current.play().catch(() => {}); } catch {}
+    }
+    setIsPlaying(true);
+  };
+
   const togglePlay = () => {
     if (isPlaying) {
-      if (youtubePlayer && youtubePlayerReady) youtubePlayer.pauseVideo();
-      if (videoPlayerRef.current) videoPlayerRef.current.pause();
-      setIsPlaying(false);
+      pauseVideo();
     } else {
-      if (youtubePlayer && youtubePlayerReady) youtubePlayer.playVideo();
-      if (videoPlayerRef.current) videoPlayerRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      playVideo();
     }
   };
 
@@ -615,13 +669,11 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
-  // Replay current sentence from video audio (Action of the blue "Repetir" button)
+  // Replay current sentence from video audio strictly from vocalization start to end
   const handleReplaySentence = () => {
     if (!currentSub) return;
     seekTo(currentSub.start);
-    if (!isPlaying) {
-      togglePlay();
-    }
+    playVideo();
   };
 
   // Reveal all words (Action of the grey "Mostrar" button)
@@ -717,18 +769,22 @@ export const MediaStudy: React.FC = () => {
     }
   };
 
-  // Time update listener & automatic loop / sentence synchronization
+  // Time update listener & automatic loop / pause-per-sentence / synchronization
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
 
     if (!currentSub) return;
 
-    // Check sentence boundary loop
+    // Check sentence boundary
     if (time >= currentSub.end && currentSub.end > 0) {
       if (isLoopingCurrent) {
         seekTo(currentSub.start);
+      } else if (!isContinuousPlay) {
+        // Modo padrão: pausa ao final de cada frase vocalizada para que o usuário complete as lacunas
+        pauseVideo();
+        seekTo(currentSub.end);
       } else {
-        // If not looping, sync current sentence index if video keeps playing forward
+        // Modo contínuo: sincroniza automaticamente a frase atual conforme o vídeo avança
         const nextSubIdx = adjustedSubtitles.findIndex((s, idx) => idx > currentSentenceIndex && time >= s.start && time < s.end);
         if (nextSubIdx !== -1) {
           setCurrentSentenceIndex(nextSubIdx);
@@ -823,7 +879,7 @@ export const MediaStudy: React.FC = () => {
       } catch {}
     }, 150);
     return () => clearInterval(interval);
-  }, [youtubePlayer, youtubePlayerReady, isPlaying, currentSentenceIndex, isLoopingCurrent]);
+  }, [youtubePlayer, youtubePlayerReady, isPlaying, currentSentenceIndex, isLoopingCurrent, isContinuousPlay]);
 
   // Speech recognition for Voice Practice button
   const startRecordingSpeech = () => {
@@ -1353,24 +1409,56 @@ export const MediaStudy: React.FC = () => {
         width: '100%',
         flexWrap: 'wrap'
       }}>
-        {/* Info Icon Button (i) */}
+        {/* Info / Keyboard Shortcuts Icon Button (i) */}
         <button
           onClick={() => setIsInfoModalOpen(prev => !prev)}
           style={{
-            background: 'none',
-            border: 'none',
-            color: '#9ca3af',
+            background: isInfoModalOpen ? 'rgba(56, 189, 248, 0.15)' : 'none',
+            border: isInfoModalOpen ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+            color: isInfoModalOpen ? '#38bdf8' : '#9ca3af',
             cursor: 'pointer',
             padding: '6px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '50%',
-            transition: 'color 0.2s'
+            transition: 'all 0.2s'
           }}
-          title="Informações da frase e tradução"
+          title="Atalhos do Teclado e Guia de Treino"
         >
           <Info size={20} />
+        </button>
+
+        {/* Playback Mode Toggle: Modo Contínuo vs Pausa a cada frase */}
+        <button
+          onClick={() => setIsContinuousPlay(prev => !prev)}
+          style={{
+            backgroundColor: isContinuousPlay ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+            border: isContinuousPlay ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
+            color: isContinuousPlay ? '#38bdf8' : '#9ca3af',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            fontSize: '0.84rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s'
+          }}
+          title={isContinuousPlay ? 'Modo Contínuo ativado (reprodução segue direto). Clique para pausar a cada frase' : 'Modo Pausa por Frase ativado (o vídeo pausa a cada sentença para você completar). Clique para modo contínuo'}
+        >
+          {isContinuousPlay ? (
+            <>
+              <Play size={15} fill="#38bdf8" />
+              <span>Contínuo</span>
+            </>
+          ) : (
+            <>
+              <Pause size={15} />
+              <span>Pausar por Frase</span>
+            </>
+          )}
         </button>
 
         {/* Play System Audio Button (Ouvir frase gerada pelo áudio do sistema) */}
@@ -1404,7 +1492,7 @@ export const MediaStudy: React.FC = () => {
           <span>Ouvir Frase</span>
         </button>
 
-        {/* Blue Repetir Button (Áudio do vídeo - Ação principal) */}
+        {/* Blue Repetir Button (Áudio do vídeo - Ação principal: início ao fim da vocalização) */}
         <button
           onClick={handleReplaySentence}
           style={{
@@ -1424,7 +1512,7 @@ export const MediaStudy: React.FC = () => {
           }}
           onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
           onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          title="Repetir o trecho de áudio do vídeo"
+          title="Repetir o trecho vocalizado do vídeo (Atalho: Tab)"
         >
           <Repeat size={16} />
           <span>Repetir</span>
@@ -1449,12 +1537,12 @@ export const MediaStudy: React.FC = () => {
           }}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#374151'}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2b313d'}
-          title="Revelar frase e respostas"
+          title="Revelar frase e respostas (Atalho: Shift+Tab ou Alt+M)"
         >
           Mostrar
         </button>
 
-        {/* Discrete Translation Toggle Icon Button (Opção de tradução da sentença) */}
+        {/* Discrete Translation Toggle Eye Icon Button (Ícone de olho discreto para tradução) */}
         <button
           onClick={() => setShowTranslation(prev => !prev)}
           style={{
@@ -1462,18 +1550,16 @@ export const MediaStudy: React.FC = () => {
             border: showTranslation ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
             color: showTranslation ? '#38bdf8' : '#9ca3af',
             borderRadius: '8px',
-            padding: '7px 10px',
-            fontSize: '0.85rem',
+            padding: '8px 10px',
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
+            justifyContent: 'center',
             transition: 'all 0.2s'
           }}
-          title={showTranslation ? 'Ocultar tradução em português' : 'Mostrar tradução em português'}
+          title={showTranslation ? 'Ocultar tradução da sentença' : 'Exibir tradução da sentença'}
         >
-          <Languages size={17} />
-          <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>PT</span>
+          {showTranslation ? <Eye size={18} /> : <EyeOff size={18} />}
         </button>
 
         {/* Blue Microphone Icon Button */}
@@ -1520,51 +1606,65 @@ export const MediaStudy: React.FC = () => {
         </div>
       )}
 
-      {/* Info Popover Details (if toggled) */}
-      {isInfoModalOpen && currentSub && (
+      {/* Info Popover: Keyboard Shortcuts & Tips */}
+      {isInfoModalOpen && (
         <div style={{
           maxWidth: '720px',
           margin: '0 auto',
           width: '100%',
-          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          backgroundColor: '#1a1f29',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
           borderRadius: '10px',
-          padding: '14px 18px',
+          padding: '16px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px'
+          gap: '12px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>
-              💡 Tradução & Dica da Frase
+            <span style={{ fontSize: '0.86rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⌨️ Atalhos do Teclado & Instruções
             </span>
             <button 
               onClick={() => setIsInfoModalOpen(false)}
-              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '2px' }}
             >
               <X size={16} />
             </button>
           </div>
-          <p style={{ margin: 0, fontSize: '0.92rem', color: '#e5e7eb', fontStyle: 'italic' }}>
-            "{currentSub.translation || 'Sem tradução automática cadastrada.'}"
-          </p>
-          {currentSub.explanation && (
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af' }}>
-              {currentSub.explanation}
-            </p>
-          )}
 
-          {/* Loop toggle checkbox */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-            <label style={{ fontSize: '0.8rem', color: '#d1d5db', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="checkbox"
-                checked={isLoopingCurrent}
-                onChange={(e) => setIsLoopingCurrent(e.target.checked)}
-              />
-              Repetir em loop contínuo esta frase
-            </label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '10px',
+            fontSize: '0.85rem'
+          }}>
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '8px 12px', borderRadius: '6px' }}>
+              <strong style={{ color: '#38bdf8' }}>Tab</strong>
+              <div style={{ color: '#9ca3af', marginTop: '2px' }}>Repetir o áudio do vídeo da frase atual (vocalização)</div>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '8px 12px', borderRadius: '6px' }}>
+              <strong style={{ color: '#38bdf8' }}>Shift + Tab</strong> <span style={{ color: '#6b7280' }}>ou</span> <strong style={{ color: '#38bdf8' }}>Alt + M</strong>
+              <div style={{ color: '#9ca3af', marginTop: '2px' }}>Mostrar resposta / Revelar palavras da frase</div>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '8px 12px', borderRadius: '6px' }}>
+              <strong style={{ color: '#38bdf8' }}>Modo Pausa / Contínuo</strong>
+              <div style={{ color: '#9ca3af', marginTop: '2px' }}>Pausa o vídeo ao final de cada frase para digitação ou segue direto</div>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '8px 12px', borderRadius: '6px' }}>
+              <strong style={{ color: '#38bdf8' }}>Ícone de Olho</strong>
+              <div style={{ color: '#9ca3af', marginTop: '2px' }}>Exibe ou oculta discretamente a tradução da frase</div>
+            </div>
           </div>
+
+          {currentSub?.explanation && (
+            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '8px', fontSize: '0.82rem', color: '#9ca3af' }}>
+              <strong style={{ color: '#e5e7eb' }}>Dica da frase:</strong> {currentSub.explanation}
+            </div>
+          )}
         </div>
       )}
 
@@ -1660,6 +1760,16 @@ export const MediaStudy: React.FC = () => {
                     type="text"
                     value={currentInputWord}
                     onChange={(e) => handleWordInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                          handleRevealSentence();
+                        } else {
+                          handleReplaySentence();
+                        }
+                      }
+                    }}
                     placeholder=""
                     autoFocus
                     style={{
