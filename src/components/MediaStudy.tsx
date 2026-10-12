@@ -8,7 +8,8 @@ import {
   ChevronRight, ChevronLeft, Repeat, Volume2, Mic, Info, Star, Bookmark, Share2, 
   ArrowLeft, Download, RefreshCw, X, HelpCircle, Check, Sparkles, Menu,
   Copy, Plus, Maximize, Minimize, Eye, EyeOff, Expand, Shrink, Settings,
-  Search, FileText, Languages, Trash2, FastForward, Rewind, Keyboard
+  Search, FileText, Languages, Trash2, FastForward, Rewind, Keyboard,
+  StepForward, PauseCircle
 } from 'lucide-react';
 
 // --- Data Models & Types ---
@@ -417,6 +418,32 @@ export const MediaStudy: React.FC = () => {
   const [isLoopingCurrent, setIsLoopingCurrent] = useState<boolean>(false);
   // Continuous playback mode: if false (default), pauses automatically at the end of each sentence; if true, plays continuously
   const [isContinuousPlay, setIsContinuousPlay] = useState<boolean>(false);
+  // Auto-advance vs Manual Hold after sentence gap completion
+  // false (default): Direct mode - speaks sentence via TTS, pauses briefly for user repetition, and auto-advances
+  // true: Manual mode - speaks sentence via TTS and stays/holds on current sentence, awaiting manual user click
+  const [isManualAdvance, setIsManualAdvance] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('hl_media_manual_advance') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const isManualAdvanceRef = useRef<boolean>(isManualAdvance);
+  useEffect(() => {
+    isManualAdvanceRef.current = isManualAdvance;
+  }, [isManualAdvance]);
+
+  const autoAdvanceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const toggleManualAdvance = () => {
+    setIsManualAdvance(prev => {
+      const nextVal = !prev;
+      try {
+        localStorage.setItem('hl_media_manual_advance', String(nextVal));
+      } catch {}
+      return nextVal;
+    });
+  };
 
   // Synced playback states
   const [currentTime, setCurrentTime] = useState(0);
@@ -717,6 +744,10 @@ export const MediaStudy: React.FC = () => {
 
   // Reset words and gaps whenever sentence changes
   useEffect(() => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
     setSolvedWordIndices({});
     setUsedChipsIndices({});
     setRevealedSlotIndices({});
@@ -732,6 +763,14 @@ export const MediaStudy: React.FC = () => {
         slotInputRef.current?.focus();
       }, 120);
     }
+
+    return () => {
+      if (autoAdvanceTimeoutRef.current) {
+        clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+      try { window.speechSynthesis?.cancel(); } catch {}
+    };
   }, [currentSentenceIndex, activeLesson?.id, practiceMode]);
 
   // Global Keyboard Shortcuts (Atalhos do Teclado)
@@ -869,13 +908,64 @@ export const MediaStudy: React.FC = () => {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); // Stop any pending speech
         const { dialogue } = parseSpeakerAndText(currentSub.text);
-        const utterance = new SpeechSynthesisUtterance(dialogue);
+        const clean = cleanLyricsAndChords(dialogue).trim();
+        const utterance = new SpeechSynthesisUtterance(clean || dialogue);
         utterance.lang = 'en-US';
         utterance.rate = 0.95;
         window.speechSynthesis.speak(utterance);
       }
     } catch (err) {
       console.warn('Speech synthesis error:', err);
+    }
+  };
+
+  // Speaks sentence with TTS and triggers callback when vocalization finishes
+  const speakSentenceWithCallback = (text: string, onSpeechEnd?: () => void) => {
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const { dialogue } = parseSpeakerAndText(text);
+        const cleanText = cleanLyricsAndChords(dialogue).trim();
+        if (!cleanText) {
+          onSpeechEnd?.();
+          return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.95;
+
+        let called = false;
+        const finish = () => {
+          if (!called) {
+            called = true;
+            onSpeechEnd?.();
+          }
+        };
+
+        utterance.onend = () => {
+          finish();
+        };
+
+        utterance.onerror = (e) => {
+          console.warn('TTS vocalization error:', e);
+          finish();
+        };
+
+        // Safety fallback timer in case speech synthesis stalls or loses focus
+        const wordsCount = cleanText.split(/\s+/).length;
+        const safetyTimeoutMs = Math.max(2500, wordsCount * 450 + 1500);
+        setTimeout(() => {
+          finish();
+        }, safetyTimeoutMs);
+
+        window.speechSynthesis.speak(utterance);
+      } else {
+        onSpeechEnd?.();
+      }
+    } catch (err) {
+      console.warn('Speech synthesis error:', err);
+      onSpeechEnd?.();
     }
   };
 
@@ -1005,6 +1095,11 @@ export const MediaStudy: React.FC = () => {
 
   // Navigation chevrons (< and >)
   const handlePrevSentence = () => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+    try { window.speechSynthesis?.cancel(); } catch {}
     if (currentSentenceIndex > 0) {
       const prevIdx = currentSentenceIndex - 1;
       setCurrentSentenceIndex(prevIdx);
@@ -1015,6 +1110,11 @@ export const MediaStudy: React.FC = () => {
   };
 
   const handleNextSentence = () => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+    try { window.speechSynthesis?.cancel(); } catch {}
     if (currentSentenceIndex < adjustedSubtitles.length - 1) {
       const nextIdx = currentSentenceIndex + 1;
       setCurrentSentenceIndex(nextIdx);
@@ -1022,6 +1122,38 @@ export const MediaStudy: React.FC = () => {
         seekTo(adjustedSubtitles[nextIdx].start);
       }
     }
+  };
+
+  // Centralized handler called when sentence gap filling is completed
+  const handleSentenceCompletion = () => {
+    playSuccessChime();
+    setShowAnswer(true);
+
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+
+    if (!currentSub) return;
+
+    // Aguarda o pequeno efeito sonoro (250ms) terminar e então vocaliza a frase inteira
+    setTimeout(() => {
+      speakSentenceWithCallback(currentSub.text, () => {
+        // Se o modo manual estiver ATIVADO, o sistema NÃO avança automaticamente.
+        // O áudio foi falado, o usuário pode ouvir, repetir no seu próprio ritmo e clicar manualmente para avançar.
+        if (isManualAdvanceRef.current) {
+          return;
+        }
+
+        // Se desativado (modo direto normal):
+        // Concede um intervalo confortável (~1600ms) para o usuário repetir em voz alta antes de passar para a próxima frase
+        autoAdvanceTimeoutRef.current = setTimeout(() => {
+          if (currentSentenceIndex < adjustedSubtitles.length - 1) {
+            handleNextSentence();
+          }
+        }, 1600);
+      });
+    }, 250);
   };
 
   // Typing logic for the word boxes
@@ -1047,14 +1179,7 @@ export const MediaStudy: React.FC = () => {
         setActiveSlotIndex(nextUnsolved);
       } else {
         // Sentence fully completed!
-        playSuccessChime();
-        setShowAnswer(true);
-        // Automatically progress to next sentence after short pause
-        setTimeout(() => {
-          if (currentSentenceIndex < adjustedSubtitles.length - 1) {
-            handleNextSentence();
-          }
-        }, 1200);
+        handleSentenceCompletion();
       }
     }
   };
@@ -1076,13 +1201,8 @@ export const MediaStudy: React.FC = () => {
       if (nextUnsolved !== -1) {
         setActiveSlotIndex(nextUnsolved);
       } else {
-        playSuccessChime();
-        setShowAnswer(true);
-        setTimeout(() => {
-          if (currentSentenceIndex < adjustedSubtitles.length - 1) {
-            handleNextSentence();
-          }
-        }, 1200);
+        // Sentence fully completed!
+        handleSentenceCompletion();
       }
     }
   };
@@ -2185,6 +2305,43 @@ export const MediaStudy: React.FC = () => {
           <RotateCcw size={18} style={{ transform: isLoopingCurrent ? 'rotate(-45deg)' : 'none', transition: 'transform 0.2s' }} />
         </button>
 
+        {/* Toggle Modo Direto vs Pausa Manual após completar lacunas (Apenas ícone discreto, sem texto) */}
+        <button
+          type="button"
+          onClick={toggleManualAdvance}
+          style={{
+            backgroundColor: isManualAdvance ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+            border: isManualAdvance ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.12)',
+            color: isManualAdvance ? '#38bdf8' : '#9ca3af',
+            borderRadius: '8px',
+            padding: '8px 10px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s',
+            height: '36px',
+            boxSizing: 'border-box'
+          }}
+          onMouseEnter={(e) => {
+            if (!isManualAdvance) {
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isManualAdvance) {
+              e.currentTarget.style.color = '#9ca3af';
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+            }
+          }}
+          title={isManualAdvance 
+            ? "Modo Manual ATIVADO: fala a frase e aguarda seu clique para avançar (Clique para modo direto)" 
+            : "Avanço Direto: fala a frase e avança automaticamente para a próxima (Clique para ativar modo manual)"}
+        >
+          {isManualAdvance ? <PauseCircle size={18} /> : <StepForward size={18} />}
+        </button>
+
         {/* Play System Audio Button (Ouvir frase gerada pelo áudio do sistema - Apenas ícone não colorido, sem texto) */}
         <button
           onClick={playSystemTtsSentence}
@@ -3081,6 +3238,14 @@ export const MediaStudy: React.FC = () => {
                   <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 10px', borderRadius: '6px' }}>
                     <strong style={{ color: '#38bdf8' }}>Ícone de Looping</strong>
                     <div style={{ color: '#9ca3af', marginTop: '2px' }}>Repete a vocalização da frase atual continuamente em looping</div>
+                  </div>
+
+                  <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 10px', borderRadius: '6px' }}>
+                    <strong style={{ color: '#38bdf8' }}>Ícone de Avanço / Modo Manual</strong>
+                    <div style={{ color: '#9ca3af', marginTop: '2px' }}>
+                      <span style={{ color: '#e5e7eb' }}>Desativado (Normal):</span> ao concluir as lacunas, o áudio fala a frase e avança automaticamente.<br />
+                      <span style={{ color: '#e5e7eb' }}>Ativado (Manual):</span> o áudio fala a frase para você repetir e aguarda o seu clique (&gt;) para avançar.
+                    </div>
                   </div>
 
                   <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 10px', borderRadius: '6px' }}>
