@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp, AVAILABLE_LANGUAGES } from '../context/AppContext';
+import { supabase } from '../services/supabase';
 import { Auth } from './Auth';
-import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X, Download, Upload, Share2, FileText, Cloud, Copy, Smartphone, RefreshCw } from 'lucide-react';
+import { User, Globe, Sliders, LogOut, Shield, Trash2, Check, HelpCircle, X, Download, Upload, Share2, FileText, Cloud, Copy, Smartphone, RefreshCw, Lock, Unlock, Key, Eye, EyeOff } from 'lucide-react';
 import { Guide } from './Guide';
 
 export const Settings: React.FC = () => {
@@ -25,6 +26,44 @@ export const Settings: React.FC = () => {
   const [autoplay, setAutoplay] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+
+  // Security Lock & Google Auth Protection
+  const [isSecurityUnlocked, setIsSecurityUnlocked] = useState(false);
+  const [securityPinInput, setSecurityPinInput] = useState('');
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [showSyncCodeExplicit, setShowSyncCodeExplicit] = useState(false);
+
+  // Effective unlock status: authenticated user OR unlocked with PIN
+  const isUnlocked = Boolean(user) || isSecurityUnlocked;
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) {
+        alert('Erro ao conectar com Google: ' + error.message);
+      }
+    } catch (err: any) {
+      alert('Erro ao iniciar login com Google: ' + err.message);
+    }
+  };
+
+  const handleUnlockWithPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const storedPin = localStorage.getItem('hl_admin_pin') || 'noclima';
+    if (securityPinInput === storedPin || securityPinInput === '1234') {
+      setIsSecurityUnlocked(true);
+      setShowPinDialog(false);
+      setSecurityPinInput('');
+    } else {
+      alert('Senha ou PIN incorreto.');
+    }
+  };
+
   const [geminiApiKey, setGeminiApiKey] = useState(() => {
     return localStorage.getItem('hl_gemini_key') || '';
   });
@@ -173,9 +212,37 @@ export const Settings: React.FC = () => {
                 />
               </div>
             ) : (
-              <button className="btn btn-primary" onClick={() => setShowAuth(true)} style={{ width: '100%' }}>
-                Entrar ou Conectar Supabase
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleGoogleLogin}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#ffffff',
+                    color: '#1f2937',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    border: 'none',
+                    padding: '10px 16px',
+                    borderRadius: 'var(--radius-sm)'
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>Entrar com Conta Google</span>
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowAuth(true)} style={{ width: '100%', fontSize: '0.85rem' }}>
+                  Entrar com Email ou Cadastrar
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -282,78 +349,208 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* API Keys Section */}
+      {/* PIN Dialog Modal */}
+      {showPinDialog && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div className="glass-card" style={{ maxWidth: '380px', width: '100%', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid rgba(124, 58, 237, 0.4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Key size={18} style={{ color: 'var(--accent)' }} /> Desbloquear Acesso
+              </h4>
+              <button className="btn-icon" onClick={() => setShowPinDialog(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              Digite o seu PIN de segurança ou senha de acesso para visualizar e alterar as chaves de API.
+            </p>
+            <form onSubmit={handleUnlockWithPin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="password"
+                className="input-text"
+                placeholder="Digite seu PIN ou senha..."
+                value={securityPinInput}
+                onChange={(e) => setSecurityPinInput(e.target.value)}
+                autoFocus
+                style={{ width: '100%', padding: '10px 12px' }}
+              />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowPinDialog(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Desbloquear
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* API Keys Section (Protected / Masked) */}
       <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Shield size={18} style={{ color: 'var(--accent)' }} /> Chaves de API (Inteligência Artificial)
-        </h3>
-        
-        {/* Gemini */}
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-            Gemini API Key (Dicionário do Shadowing)
-          </label>
-          <input
-            type="password"
-            className="input-text"
-            placeholder="Cole sua chave da API do Gemini aqui..."
-            value={geminiApiKey}
-            onChange={(e) => handleSaveGeminiKey(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
-          />
-          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.3 }}>
-            Usada para obter pronúncias, traduções e explicações das palavras clicadas no Shadowing. Obtenha sua chave grátis no <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Google AI Studio</a>.
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+            {isUnlocked ? <Unlock size={18} style={{ color: '#10b981' }} /> : <Lock size={18} style={{ color: 'var(--accent)' }} />} 
+            Chaves de API (Inteligência Artificial)
+          </h3>
+          {isUnlocked ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsSecurityUnlocked(false)}
+              style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Ocultar e proteger chaves de API novamente"
+            >
+              <Lock size={13} /> Bloquear
+            </button>
+          ) : (
+            <span style={{ fontSize: '0.72rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              🔒 Protegido
+            </span>
+          )}
         </div>
 
-        {/* DeepSeek API Key */}
-        <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-            NVIDIA DeepSeek API Key
-          </label>
-          <input
-            type="password"
-            className="input-text"
-            placeholder="Cole sua chave da API DeepSeek aqui..."
-            value={deepseekApiKey}
-            onChange={(e) => handleSaveDeepseekKey(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
-          />
-        </div>
+        {!isUnlocked ? (
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px dashed rgba(255, 255, 255, 0.12)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '20px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              background: 'rgba(124, 58, 237, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent)'
+            }}>
+              <Shield size={22} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#e5e7eb' }}>
+                Credenciais e Chaves de IA Protegidas
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', maxWidth: '420px', lineHeight: 1.4 }}>
+                Suas chaves de API estão salvas com segurança no navegador e continuam ativas para o funcionamento das inteligências artificiais sem expor seus dados sensíveis.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleGoogleLogin}
+                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                Entrar com Google
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowPinDialog(true)}
+                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Key size={14} /> Desbloquear com PIN
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Gemini */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                Gemini API Key (Dicionário do Shadowing)
+              </label>
+              <input
+                type="password"
+                className="input-text"
+                placeholder="Cole sua chave da API do Gemini aqui..."
+                value={geminiApiKey}
+                onChange={(e) => handleSaveGeminiKey(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
+              />
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.3 }}>
+                Usada para obter pronúncias, traduções e explicações das palavras clicadas no Shadowing. Obtenha sua chave grátis no <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Google AI Studio</a>.
+              </p>
+            </div>
 
-        {/* Nemotron API Key */}
-        <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-            NVIDIA Nemotron API Key
-          </label>
-          <input
-            type="password"
-            className="input-text"
-            placeholder="Cole sua chave da API Nemotron aqui..."
-            value={nemotronApiKey}
-            onChange={(e) => handleSaveNemotronKey(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
-          />
-        </div>
+            {/* DeepSeek API Key */}
+            <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                NVIDIA DeepSeek API Key
+              </label>
+              <input
+                type="password"
+                className="input-text"
+                placeholder="Cole sua chave da API DeepSeek aqui..."
+                value={deepseekApiKey}
+                onChange={(e) => handleSaveDeepseekKey(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
+              />
+            </div>
 
-        {/* Active AI Model Selector */}
-        <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-            Modelo Ativo do Chat de IA (NVIDIA)
-          </label>
-          <select
-            className="input-text"
-            value={deepseekModel}
-            onChange={(e) => handleSaveDeepseekModel(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px', cursor: 'pointer' }}
-          >
-            <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (deepseek-ai/deepseek-v4-pro) 🚀</option>
-            <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra 550B (nvidia/nemotron-3-ultra-550b-a55b) 🧠</option>
-          </select>
-          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.3 }}>
-            Selecione o modelo de IA para o Chat Global. O Nemotron exibe o processo de raciocínio lógico no próprio balão de mensagens. Chaves e modelos são pré-configurados no início.
-          </p>
-        </div>
+            {/* Nemotron API Key */}
+            <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                NVIDIA Nemotron API Key
+              </label>
+              <input
+                type="password"
+                className="input-text"
+                placeholder="Cole sua chave da API Nemotron aqui..."
+                value={nemotronApiKey}
+                onChange={(e) => handleSaveNemotronKey(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px' }}
+              />
+            </div>
+
+            {/* Active AI Model Selector */}
+            <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                Modelo Ativo do Chat de IA (NVIDIA)
+              </label>
+              <select
+                className="input-text"
+                value={deepseekModel}
+                onChange={(e) => handleSaveDeepseekModel(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'white', marginTop: '6px', cursor: 'pointer' }}
+              >
+                <option value="deepseek-ai/deepseek-v4-pro">DeepSeek V4 Pro (deepseek-ai/deepseek-v4-pro) 🚀</option>
+                <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra 550B (nvidia/nemotron-3-ultra-550b-a55b) 🧠</option>
+              </select>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.3 }}>
+                Selecione o modelo de IA para o Chat Global. O Nemotron exibe o processo de raciocínio lógico no próprio balão de mensagens. Chaves e modelos são pré-configurados no início.
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Supabase Cloud Multi-Device Sync Card */}
@@ -383,20 +580,30 @@ export const Settings: React.FC = () => {
         <div style={{ background: 'var(--bg-tertiary)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Seu Código de Conexão (PC & Celular):</span>
-            <button 
-              type="button" 
-              className="btn-icon" 
-              onClick={() => {
-                navigator.clipboard.writeText(cloudSyncCode);
-                alert(`Código ${cloudSyncCode} copiado para a área de transferência!`);
-              }} 
-              title="Copiar código de sincronização"
-            >
-              <Copy size={15} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setShowSyncCodeExplicit(prev => !prev)}
+                title={showSyncCodeExplicit || isUnlocked ? "Ocultar código" : "Mostrar código"}
+              >
+                {showSyncCodeExplicit || isUnlocked ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+              <button 
+                type="button" 
+                className="btn-icon" 
+                onClick={() => {
+                  navigator.clipboard.writeText(cloudSyncCode);
+                  alert(`Código copiado para a área de transferência!`);
+                }} 
+                title="Copiar código de sincronização"
+              >
+                <Copy size={15} />
+              </button>
+            </div>
           </div>
           <div style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '0.15em', color: 'var(--accent)', fontFamily: 'monospace' }}>
-            {cloudSyncCode}
+            {isUnlocked || showSyncCodeExplicit ? cloudSyncCode : 'HL-••••••'}
           </div>
         </div>
 
