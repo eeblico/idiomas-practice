@@ -46,6 +46,7 @@ function youtubeTranscriptPlugin() {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react(), youtubeTranscriptPlugin()],
   build: {
     chunkSizeWarningLimit: 3500,

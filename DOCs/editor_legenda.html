@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Editor de Legenda Dinâmica Bilíngue - Punch the Brakes</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { margin: 0; background: #111318; color: #f0f2f5; display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 58%; padding: 24px; overflow-y: auto; border-right: 1px solid #262936; }
+    .preview-pane { width: 42%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0b0c10; padding: 20px; position: relative; }
+    h1 { font-size: 20px; margin: 0 0 6px 0; color: #fff; }
+    p.sub { font-size: 13px; color: #9aa0b4; margin: 0 0 20px 0; }
+    .controls-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #191c24; padding: 14px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #282c3a; }
+    .control-group label { display: block; font-size: 12px; color: #9aa0b4; margin-bottom: 4px; }
+    .control-group input { width: 100%; padding: 7px 10px; background: #111318; border: 1px solid #32374a; color: #fff; border-radius: 6px; font-size: 13px; }
+    .cue-card { background: #191c24; border: 1px solid #282c3a; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .cue-header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .cue-header span { font-size: 12px; font-weight: 600; color: #f7cb1d; }
+    .cue-header input { width: 105px; padding: 5px 8px; background: #111318; border: 1px solid #32374a; color: #fff; border-radius: 5px; font-size: 12px; text-align: center; }
+    .cue-header button { margin-left: auto; background: #262b3d; color: #aeb6d0; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+    .cue-header button:hover { background: #353c54; color: #fff; }
+    .field-row { margin-bottom: 8px; }
+    .field-row label { display: block; font-size: 11px; color: #8c93a8; margin-bottom: 3px; }
+    .field-row input { width: 100%; padding: 8px 10px; background: #111318; border: 1px solid #32374a; color: #fff; border-radius: 6px; font-size: 14px; }
+    .actions { display: flex; gap: 12px; margin-top: 16px; position: sticky; bottom: 0; background: #111318; padding: 12px 0; border-top: 1px solid #262936; }
+    .btn { padding: 11px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; transition: 0.15s; }
+    .btn-primary { background: #f7cb1d; color: #111318; flex: 1; }
+    .btn-primary:hover { background: #e5b90f; }
+    .video-container { position: relative; width: 324px; height: 576px; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 35px rgba(0,0,0,0.6); border: 1px solid #2a2e3d; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h1>Editor de Legenda Dinâmica (Estilo Kapwing + PT abaixo)</h1>
+    <p class="sub">Altere qualquer texto em português, tamanho ou posição abaixo, salve o arquivo <b>legenda_bilingue.ass</b> e clique duas vezes em <b>atualizar_legenda.bat</b>.</p>
+
+    <div class="controls-grid">
+      <div class="control-group">
+        <label>Tamanho Inglês (px)</label>
+        <input type="number" id="sizeEn" value="44" min="20" max="80">
+      </div>
+      <div class="control-group">
+        <label>Tamanho Português (px)</label>
+        <input type="number" id="sizePt" value="33" min="16" max="60">
+      </div>
+      <div class="control-group">
+        <label>Altura Inglês (MarginV)</label>
+        <input type="number" id="marginEn" value="285" min="50" max="1000">
+      </div>
+      <div class="control-group">
+        <label>Altura Português (MarginV)</label>
+        <input type="number" id="marginPt" value="218" min="30" max="950">
+      </div>
+    </div>
+
+    <div id="cuesContainer"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="downloadASS()">Salvar / Baixar legenda_bilingue.ass</button>
+    </div>
+  </div>
+
+  <div class="preview-pane">
+    <div class="video-container">
+      <video id="videoPlayer" src="video_legendado.mp4" controls></video>
+    </div>
+    <p style="font-size:12px; color:#8c93a8; margin-top:12px;">Vídeo renderizado: video_legendado.mp4</p>
+  </div>
+
+  <script>
+    const chunks = [
+      { start: "0:00:00.08", end: "0:00:01.52", en: "when we just", pt: "Quando tudo o que a gente", words: [["0:00:00.08","0:00:00.52",0],["0:00:00.52","0:00:01.00",1],["0:00:01.00","0:00:01.52",2]] },
+      { start: "0:00:01.52", end: "0:00:02.84", en: "wanna slow down", pt: "queria era desacelerar", words: [["0:00:01.52","0:00:01.96",0],["0:00:01.96","0:00:02.44",1],["0:00:02.44","0:00:02.84",2]] },
+      { start: "0:00:06.40", end: "0:00:07.44", en: "Punch the brakes", pt: "Pise no freio", words: [["0:00:06.40","0:00:06.76",0],["0:00:06.76","0:00:07.00",1],["0:00:07.00","0:00:07.44",2]] },
+      { start: "0:00:07.44", end: "0:00:08.04", en: "and let me", pt: "e me deixe", words: [["0:00:07.44","0:00:07.64",0],["0:00:07.64","0:00:07.80",1],["0:00:07.80","0:00:08.04",2]] },
+      { start: "0:00:08.04", end: "0:00:09.12", en: "stay a while", pt: "ficar por um momento", words: [["0:00:08.04","0:00:08.44",0],["0:00:08.44","0:00:08.76",1],["0:00:08.76","0:00:09.12",2]] },
+      { start: "0:00:13.28", end: "0:00:14.60", en: "Long enough 'til", pt: "Tempo suficiente", words: [["0:00:13.28","0:00:13.72",0],["0:00:13.72","0:00:14.12",1],["0:00:14.12","0:00:14.60",2]] },
+      { start: "0:00:14.76", end: "0:00:15.72", en: "I can figure", pt: "para eu conseguir", words: [["0:00:14.76","0:00:15.00",1],["0:00:15.00","0:00:15.72",2]] },
+      { start: "0:00:15.72", end: "0:00:16.32", en: "out", pt: "entender", words: [["0:00:15.72","0:00:16.32",0]] },
+      { start: "0:00:18.64", end: "0:00:19.16", en: "How to stop", pt: "Como parar", words: [["0:00:18.64","0:00:18.76",0],["0:00:18.76","0:00:18.92",1],["0:00:18.92","0:00:19.16",2]] },
+      { start: "0:00:19.16", end: "0:00:19.92", en: "spinning", pt: "de girar", words: [["0:00:19.16","0:00:19.92",0]] },
+      { start: "0:00:19.96", end: "0:00:21.04", en: "'round on this", pt: "nessa roda", words: [["0:00:19.96","0:00:20.48",0],["0:00:20.48","0:00:20.68",1],["0:00:20.68","0:00:21.04",2]] },
+      { start: "0:00:21.08", end: "0:00:22.16", en: "wagon wheel", pt: "sem fim", words: [["0:00:21.08","0:00:21.76",0],["0:00:21.76","0:00:22.16",1]] },
+      { start: "0:00:22.88", end: "0:00:24.16", en: "Never knowing", pt: "Sem nunca saber ao certo", words: [["0:00:22.88","0:00:23.44",0],["0:00:23.44","0:00:24.16",1]] },
+      { start: "0:00:24.16", end: "0:00:24.96", en: "how we're supposed", pt: "como deveríamos", words: [["0:00:24.16","0:00:24.32",0],["0:00:24.32","0:00:24.48",1],["0:00:24.48","0:00:24.96",2]] },
+      { start: "0:00:25.00", end: "0:00:26.52", en: "to feel, oh", pt: "nos sentir, oh", words: [["0:00:25.00","0:00:25.24",0],["0:00:25.24","0:00:25.72",1],["0:00:25.72","0:00:26.52",2]] },
+      { start: "0:00:27.20", end: "0:00:28.28", en: "Punch the brakes", pt: "Pise no freio", words: [["0:00:27.20","0:00:27.60",0],["0:00:27.60","0:00:27.84",1],["0:00:27.84","0:00:28.28",2]] },
+      { start: "0:00:28.28", end: "0:00:28.88", en: "and let me", pt: "e me deixe", words: [["0:00:28.28","0:00:28.48",0],["0:00:28.48","0:00:28.68",1],["0:00:28.68","0:00:28.88",2]] },
+      { start: "0:00:28.88", end: "0:00:30.00", en: "stay a while", pt: "ficar por um momento", words: [["0:00:28.88","0:00:29.32",0],["0:00:29.32","0:00:29.52",1],["0:00:29.52","0:00:30.00",2]] }
+    ];
+
+    function parseTime(str) {
+      const p = str.split(':');
+      return parseFloat(p[0])*3600 + parseFloat(p[1])*60 + parseFloat(p[2]);
+    }
+
+    function seekTo(str) {
+      const v = document.getElementById('videoPlayer');
+      v.currentTime = parseTime(str);
+      v.play();
+    }
+
+    function renderCues() {
+      const c = document.getElementById('cuesContainer');
+      c.innerHTML = '';
+      chunks.forEach((ch, idx) => {
+        const div = document.createElement('div');
+        div.className = 'cue-card';
+        div.innerHTML = `
+          <div class="cue-header">
+            <span>Bloco #${idx+1}</span>
+            <input type="text" value="${ch.start}" onchange="chunks[${idx}].start=this.value">
+            <span>até</span>
+            <input type="text" value="${ch.end}" onchange="chunks[${idx}].end=this.value">
+            <button onclick="seekTo('${ch.start}')">▶ Ver trecho</button>
+          </div>
+          <div class="field-row">
+            <label>Inglês (Branco com destaque Amarelo por palavra)</label>
+            <input type="text" value="${ch.en.replace(/"/g,'&quot;')}" oninput="chunks[${idx}].en=this.value">
+          </div>
+          <div class="field-row" style="margin-bottom:0;">
+            <label>Português (Branco abaixo)</label>
+            <input type="text" value="${ch.pt.replace(/"/g,'&quot;')}" oninput="chunks[${idx}].pt=this.value">
+          </div>
+        `;
+        c.appendChild(div);
+      });
+    }
+
+    function downloadASS() {
+      const sizeEn = document.getElementById('sizeEn').value || 44;
+      const sizePt = document.getElementById('sizePt').value || 33;
+      const marginEn = document.getElementById('marginEn').value || 285;
+      const marginPt = document.getElementById('marginPt').value || 218;
+      const YEL = "{\\1c&H1DCBF7&}";
+      const WHT = "{\\1c&HFFFFFF&}";
+
+      let ass = `[Script Info]
+Title: Punch the Brakes - Dynamic Bilingual Subtitles
+ScriptType: v4.00+
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+YCbCr Matrix: TV.709
+PlayResX: 720
+PlayResY: 1280
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: EN,Arial,${sizeEn},&H00FFFFFF,&H001DCBF7,&H38000000,&H38000000,-1,0,0,0,100,100,0,0,3,12,0,2,40,40,${marginEn},1
+Style: PT,Arial,${sizePt},&H00FFFFFF,&H00FFFFFF,&H45000000,&H45000000,-1,0,0,0,100,100,0,0,3,9,0,2,40,40,${marginPt},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+      chunks.forEach(ch => {
+        const wList = ch.en.trim().split(/\s+/);
+        ch.words.forEach(([ws, we, wIdx]) => {
+          const formatted = wList.map((w, i) => i === wIdx ? `${YEL}${w}${WHT}` : w).join(' ');
+          ass += `Dialogue: 1,${ws},${we},EN,,0,0,0,,${formatted}\n`;
+        });
+      });
+      chunks.forEach(ch => {
+        ass += `Dialogue: 0,${ch.start},${ch.end},PT,,0,0,0,,${ch.pt}\n`;
+      });
+
+      const blob = new Blob([ass], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'legenda_bilingue.ass';
+      a.click();
+    }
+
+    renderCues();
+  </script>
+</body>
+</html>
